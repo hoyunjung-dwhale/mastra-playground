@@ -12,11 +12,12 @@
     "start": "mastra start"
   },
   "dependencies": {
-    "@mastra/core": "1.65.0"
+    "@mastra/core": "1.65.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@types/node": "latest",
     "mastra": "1.28.0",
-    "typescript": "^6.0.3",
-    "@types/node": "latest"
+    "typescript": "^6.0.3"
   }
 }
