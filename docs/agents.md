@@ -386,7 +386,7 @@ flowchart TB
 
 #### 실습 결과
 
-- `src/mastra/processors/input-normalizer.ts`. `processInput`으로 텍스트 조각만 NFC 정규화·공백 정리. 줄바꿈은 합치지 않는다. LLM 없이 함수를 직접 불러 확인했다.
+- `src/mastra/processors/input-normalizer.ts`(5-1에서 내장 `UnicodeNormalizer`로 교체해 지금은 없다. 골격·완성 커밋에 남아 있다). `processInput`으로 텍스트 조각만 NFC 정규화·공백 정리. 줄바꿈은 합치지 않는다. LLM 없이 함수를 직접 불러 확인했다.
 - 메시지 구조는 `message → content → parts[] → text` 세 겹이다. 한 메시지에 텍스트·이미지·도구 호출·추론 조각이 섞이기 때문이고, assistant 턴 하나가 `parts: [tool-invocation, text]`다. Vercel AI SDK `UIMessage` 형식이다.
 - 프로세서에 들어오는 배열은 Memory 없으면 이번 메시지 하나, 있으면 이전 대화까지 합친 것이다.
 

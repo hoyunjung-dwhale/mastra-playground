@@ -30,6 +30,7 @@ cp .env.example .env
 ```bash
 npm run dev        # 개발 서버 + Studio (http://localhost:4111)
 npm run call       # 스크립트로 에이전트 호출 (scripts/call-todo-agent.ts)
+npm run structured # structured output 호출 (scripts/structured-output.ts)
 npm run check      # biome (서식·린트). 자동 수정은 npm run check:fix
 npm run typecheck  # tsc
 ```
@@ -50,8 +51,10 @@ src/mastra/
     todo-agent.prompt.ts  system prompt
   tools/                도구. 파일 하나에 하나씩, id는 kebab-case
   todo/                 할 일 스키마(zod)와 메모리 저장소
+  processors/           입력 가드레일(내장), 출력 스트림 필터(커스텀)
 scripts/
   call-todo-agent.ts    generate·stream 호출 예제
+  structured-output.ts  structured output 호출 예제
 docs/
   agents.md             Agents 절 정리 (저장소 작성자)
 notes/                  클론한 학습자가 자기 정리를 쓰는 곳
