@@ -16,8 +16,10 @@ export const inputNormalizer: Processor & Required<Pick<Processor, 'processInput
     })),
 };
 
-// TODO: 정규화 규칙을 정한다. 앞뒤 공백 제거, 유니코드 NFC 정규화, 연속 공백 하나로 등.
-// 여러 줄 붙여넣기의 줄바꿈을 뭉개지 않도록 어디까지 합칠지 정한다.
+// 줄바꿈은 합치지 않는다. 여러 줄 붙여넣기(코드, 명단)의 구조가 뭉개지기 때문이다.
 function normalize(text: string): string {
-  return text;
+  return text
+    .normalize('NFC')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
 }
