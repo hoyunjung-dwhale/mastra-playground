@@ -9,15 +9,21 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "check": "biome check",
+    "check:fix": "biome check --write",
+    "typecheck": "tsc --noEmit",
+    "call": "tsx --env-file=.env scripts/call-todo-agent.ts"
   },
   "dependencies": {
     "@mastra/core": "1.65.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
     "@types/node": "latest",
     "mastra": "1.28.0",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3"
   }
 }
