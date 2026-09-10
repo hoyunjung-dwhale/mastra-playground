@@ -497,3 +497,27 @@ Processors가 틀이면 Guardrails는 그 틀에 넣는 내장 검사기다. LLM
 | 청크 배치 | `BatchPartsProcessor`를 출력 검사기 앞에 두어 호출 횟수 감소 |
 
 문서의 세 방법은 차단을 유지하면서 지연을 줄이는 것이고, clap-agent의 사후 비동기는 지연을 없애고 관측만 하는 것이다. 그 서비스에서 차단이 필수인지로 갈린다.
+
+## 6. Human-in-the-Loop
+
+원문: https://mastra.ai/docs/agents/human-in-the-loop
+
+개념만 봤다. 실습은 스냅샷 storage가 필요해 9회차 Storage 뒤로 미룬다. 건너뛴 소제목: Supervisor agents(범위 밖), Resuming after a restart(`listSuspendedRuns`, storage 뒤에).
+
+### 6-1. 도구 실행 전 승인
+
+도구가 실행되기 전에 멈추고 사람의 승인을 기다린다. 삭제·결제·발송처럼 되돌릴 수 없는 행동, 비싼 외부 호출에 쓴다.
+
+| 방법 | 어디에 | 언제 멈추나 | 재개 |
+|---|---|---|---|
+| `requireApproval: true` | 도구 정의 (호출 옵션 `requireToolApproval`이면 전부) | `execute` 전 | `approveToolCall` / `declineToolCall({ reason })` |
+| `suspend()` | `execute` 안 | 실행 도중 추가 정보가 필요할 때 | `resumeStream(데이터)`, `autoResumeSuspendedTools`면 다음 메시지에서 자동 |
+
+- 멈추면 `stream`은 `tool-call-approval` 청크(`toolCallId`, `toolName`, `args`), `generate`는 `finishReason: 'suspended'`와 `suspendPayload`를 준다. `decline`의 `reason`은 도구 결과 자리에 들어가 모델이 다른 답을 찾는다.
+- 스냅샷 storage가 없으면 "snapshot not found"다.
+- 승인은 사람이 본 `toolName + args` 지문에 묶고 `beforeToolCall`에서 대조하는 것이 안전하다.
+- `askUserTool`이 `suspend()` 방식의 내장 도구다.
+
+#### clap-agent
+
+- 쓰지 않는다. 도구가 전부 조회라 승인할 행동이 없다. 파일 삭제·셸 실행 도구가 있는 harness 템플릿에는 `requireApproval`이 기본으로 걸려 있었다.
