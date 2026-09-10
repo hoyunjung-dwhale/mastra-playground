@@ -77,6 +77,12 @@ Claude Code가 이 루프 그대로다. Bash나 WebFetch 호출이 tool call이�
 - 조회: 서버 라우트와 도구는 `getAgentById` (`server/review-thread-get.ts:43`, `tools/generate-report-tool.ts:66`), 평가 스크립트는 `getAgent(CLAP_AGENT_KEY)` (`evals/tool-calls-evals.ts:44`). 상수는 `constants.ts:3-4`.
 - `name`은 상수로 빼지 않는다. id·키는 22곳에서 참조되지만 name은 생성자 한 곳뿐이다.
 
+#### 헷갈렸던 지점
+
+- "import 해서 직접 쓰면 홀로 동작한다"는 무슨 뜻인가 → `new Agent()`만 한 객체에는 storage·logger가 없다. `new Mastra({ agents })`가 그 객체를 직접 수정해 주입하므로, `Mastra`를 만드는 코드가 실행되지 않는 별도 스크립트에서만 주입 없이 동작한다.
+- `name`은 왜 상수로 안 빼나 → 여러 곳에서 참조하는 값만 상수로 뺀다. id·키는 등록·조회·라우트에서 쓰이지만 name은 생성자 한 곳뿐이다.
+- 골격은 누가 만드나 → import·구조·주석은 AI가, 프롬프트 문장처럼 판단이 드는 자리는 사용자가 `TODO`를 채운다.
+
 ### 1-3. 에이전트 호출하기
 
 #### generate와 stream
@@ -103,6 +109,13 @@ Claude Code가 이 루프 그대로다. Bash나 WebFetch 호출이 tool call이�
 - 그 보조 에이전트는 등록하지 않고 파일 안에서 만든 객체를 직접 쓴다. (`:33-38`) 메모리도 storage도 필요 없는 일회성 변환기라 공유 자원이 없어도 된다. 모델은 싼 `OPENAI_GPT_MINI`.
 - 모델 출력은 `sanitizeHtml`로 정리한다. (`:55-68`) 코드펜스 제거와 XSS 방지를 코드로 강제한다.
 - `stream` 호출은 코드에 없다. 프론트엔드가 서버 엔드포인트를 직접 부른다. 평가는 `runEvals`에 에이전트를 `target`으로 넘긴다. (`evals/safety-evals.ts:33`)
+
+#### 헷갈렸던 지점
+
+- `generate`와 `stream`은 어디서 고르나 → 설정이 아니라 에이전트를 부르는 코드가 둘 중 하나를 호출한다. 프론트엔드는 Mastra 서버의 `/generate`·`/stream` 엔드포인트 중 하나를 부른다.
+- `await`가 뭔가 → `Promise`(Java의 `CompletableFuture`)에서 값을 꺼내는 것. `future.get()`과 달리 스레드를 막지 않고 그 함수만 멈춘다. 모듈 최상위에서 바로 쓸 수 있는 것은 ES 모듈이기 때문이다.
+- `stream.usage`는 왜 `await`가 필요한가 → 스트림은 합계를 끝나야 알 수 있어서 값이 아니라 Promise로 되어 있다.
+- `process`를 못 찾는 오류 → TypeScript 6.0부터 `types` 기본값이 빈 배열이라 tsconfig에 `"types": ["node"]`를 명시해야 한다.
 
 ## 2. Tools
 
@@ -181,6 +194,16 @@ TypeScript 타입은 실행 시점에 사라지므로, 밖에서 들어온 JSON(
 - `execute`의 둘째 인자에서 `requestContext`를 꺼내 인증과 기본값에 쓰고, `requestContextSchema`로 그 형태까지 선언한다. `get-review-group-tool.ts:32-35`
 - 도구가 예외를 던지면 지금 core(1.65.0)는 `TOOL_EXECUTION_FAILED`로 감싸 던지고, 루프는 그 오류를 `tool-error` 청크와 `output-error` 상태의 도구 호출로 기록한 뒤 이어진다. clap-agent 주석은 "스트림 전체가 끊긴다"고 하는데 당시 버전 차이일 수 있어, 실제로 `throw`를 넣어 확인하는 것이 확실하다.
 
+#### 헷갈렸던 지점
+
+- 키와 id가 뭐가 다른가 → `tools`는 `Map<String, Tool>`이고 키가 모델이 보는 함수 이름이다. `id`는 도구 객체 안의 필드로 트레이스·CLI가 쓴다. 모델은 id를 본 적이 없다.
+- 굳이 다르게 할 필요가 있나 → 없다. 관례를 하나로 정하면 된다. 우리는 키는 변수명, id는 kebab-case다.
+- `describe`는 모델에게 어떻게 보이나 → `inputSchema`가 JSON Schema로 변환되어 `parameters`로 실리고, `describe` 문구가 각 필드의 `description`이 된다.
+- `z`는 뭔가 → zod 라이브러리의 진입점. `z.string()`, `z.object()` 같은 스키마 생성 함수가 붙어 있다.
+- zod를 왜 쓰나 → TypeScript 타입은 실행 시점에 사라지므로 모델이 만든 JSON을 검증할 수단이 필요하다. 스키마 하나로 JSON Schema 생성·런타임 검증·타입 추론을 다 한다.
+- 여러 줄 문자열 → 백틱. Java 텍스트 블록과 같고 `${}`는 변수 삽입이다.
+- Studio에서 도구 호출을 어떻게 보나 → 답변 위의 접힌 카드에 도구 이름·인자·결과가 있고, Observability 탭의 트레이스에서 LLM 호출·도구 실행 span을 본다.
+
 ### 2-2. 스키마와 description 작성
 
 2-1에서 대부분 다뤘으므로 코드 추가로 대체했다. 지침은 세 줄이다.
@@ -201,6 +224,13 @@ TypeScript 타입은 실행 시점에 사라지므로, 밖에서 들어온 JSON(
 - 팩토리가 `z.union([clapApiToolErrorSchema, opts.outputSchema])`로 에러 스키마를 앞에 둔다. `clap-tool-factory.ts:96-99` 이유가 주석에 있다.
 - description은 "현재 대화의 리뷰 그룹 정보를 조회한다. … 사용자가 '리뷰 이름'처럼 요청하면 호출한다" 순서다. `get-review-group-tool.ts:17-18`
 
+#### 헷갈렸던 지점
+
+- `true as const`는 뭔가 → `true`는 `boolean`으로 넓혀지므로 `z.literal(true)`와 맞추려면 리터럴 타입으로 고정해야 한다.
+- 합 타입은 뭔가 → `A | B`. 관계없는 두 타입을 그 자리에서 묶는다. `'error' in result`로 어느 쪽인지 좁힌다.
+- union 순서가 왜 중요한가 → `z.object`는 모르는 키를 버리고 `z.union`은 앞에서부터 처음 통과한 것을 쓴다. 정상 스키마가 전부 optional이면 에러 객체가 `{}`로 잘린다.
+- 도구가 예외를 던지면 어떻게 되나 → core가 `TOOL_EXECUTION_FAILED`로 감싸고 루프는 `tool-error`로 기록한 뒤 이어진다(1.65.0 기준). 그래도 예외 원문보다 행동 지시가 담긴 결과 객체가 모델 복구에 낫다.
+
 ### 2-3. 도구 결과가 컨텍스트를 차지하는 문제
 
 도구 결과는 통째로 메시지 목록에 들어가 루프가 도는 내내 토큰을 차지한다.
@@ -215,3 +245,8 @@ TypeScript 타입은 실행 시점에 사라지므로, 밖에서 들어온 JSON(
 
 - 둘 다 쓰지 않고 `execute`에서 줄인다. 응답 대부분을 차지하는 작성자 정보를 축약 유저로 바꾸고, 모델이 보면 안 되는 `available`은 뺀다. `get-review-group-tool.ts:50-58`
 - 프론트엔드가 도구 결과 원본을 쓰지 않으므로 `toModelOutput`이 필요 없고, 민감 값은 트레이스 단계의 `SensitiveDataFilter`로 가리므로 도구별 `transform`이 필요 없다. (추정)
+
+#### 헷갈렸던 지점
+
+- clap-agent는 왜 `toModelOutput`·`transform`을 안 쓰나 → 프론트엔드가 도구 결과 원본을 쓰지 않아 `execute`에서 줄이면 충분하고, 민감 값은 트레이스 단계의 `SensitiveDataFilter`로 가린다. (추정)
+
