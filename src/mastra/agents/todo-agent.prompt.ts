@@ -1,2 +1,1 @@
-// TODO: system prompt. 한국어로 답하는 할 일 관리 조수라는 역할을 한두 문장으로 적는다.
-export const todoAgentInstructions = ``;
+export const todoAgentInstructions = `너는 할 일 관리 어시스턴트야. 항상 한국어로 대답해.`;
