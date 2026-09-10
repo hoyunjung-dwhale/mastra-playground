@@ -53,7 +53,8 @@ src/mastra/
 scripts/
   call-todo-agent.ts    generate·stream 호출 예제
 docs/
-  agents.md             Agents 절 정리
+  agents.md             Agents 절 정리 (저장소 작성자)
+notes/                  클론한 학습자가 자기 정리를 쓰는 곳
 CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 ```
 
@@ -84,9 +85,13 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 
 직접 실습하려면 이렇게 한다.
 
-1. `git log --oneline`에서 하고 싶은 소제목의 **골격** 커밋을 찾아 checkout 한다.
+1. `git log --oneline`에서 하고 싶은 소제목의 **골격** 커밋을 찾아 자기 브랜치를 만든다.
+   ```bash
+   git switch -c study/<이름> <골격 커밋>
+   ```
 2. `docs/`의 해당 절을 읽으면서 `TODO`를 채우고 `npm run check`, `npm run typecheck`, Studio로 확인한다.
-3. 다음 **완성** 커밋의 코드와 비교한다.
+3. 다음 **완성** 커밋의 코드와 비교한다. (`git diff <완성 커밋> -- src`)
+4. 자기 정리는 `notes/`에 쓴다. `docs/`는 저장소 작성자의 정리이므로 고치지 않는다. 그래야 이후 회차를 `git pull`로 받을 때 충돌이 나지 않는다.
 
 절이 끝난 시점에는 태그가 있다. `git tag`로 목록을 본다.
 
