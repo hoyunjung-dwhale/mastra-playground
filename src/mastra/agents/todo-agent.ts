@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { TODO_AGENT_ID } from '../constants';
 import { MODELS } from '../models';
-import { inputNormalizer } from '../processors/input-normalizer';
+import { inputModeration, unicodeNormalizer } from '../processors/guardrails';
 import { outputFilter } from '../processors/output-filter';
 import { addTodoTool } from '../tools/add-todo-tool';
 import { completeTodoTool } from '../tools/complete-todo-tool';
@@ -14,6 +14,7 @@ export const todoAgent = new Agent({
   instructions: todoAgentInstructions,
   model: MODELS.GOOGLE_FLASH,
   tools: { addTodoTool, listTodosTool, completeTodoTool },
-  inputProcessors: [inputNormalizer],
+  // 정규화가 먼저 돌아야 모더레이션이 정리된 텍스트를 본다.
+  inputProcessors: [unicodeNormalizer, inputModeration],
   outputProcessors: [outputFilter],
 });
