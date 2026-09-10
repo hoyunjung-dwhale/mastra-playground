@@ -100,6 +100,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | `agents/1-overview` | Agents 절 Overview 페이지 끝 |
 | `agents/2-tools` | Agents 절 Tools 페이지 끝 |
 | `agents/3-structured-output` | Agents 절 Structured Output 페이지 끝 |
+| `agents/4-processors` | Agents 절 Processors 페이지 끝 |
 
 ## 공식 문서에서 다룬 것과 건너뛴 것
 
@@ -136,7 +137,19 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Valibot, ArkType, JSON Schema | 건너뜀 | zod만 씀 |
 | Stream structured output, `useAgent`, `prepareStep` | 건너뜀 | 필요할 때 레퍼런스로 충분 |
 
-나머지 페이지(Processors, Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
+### Agents / Processors
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| 개념, Execution order, Attach processors | 다룸 (4-1) | 훅 시점과 순서, Memory 프로세서와의 관계 |
+| Create custom processors (processInput, processOutputStream, processOutputResult, abort) | 다룸 (4-1, 4-2) | 실무 프로세서는 대부분 커스텀 |
+| Built-in utility processors (TokenLimiter, ToolCallFilter) | 다룸 (4-3, 개념만) | Memory가 있을 때 의미. 실습은 Memory 회차로 |
+| processInputStep, processLLMRequest/Response, prepareStep | 건너뜀 | 단계별 모델 교체 같은 고급 용도 |
+| Response caching | 건너뜀 | beta |
+| Advanced patterns, API error handling, ProviderHistoryCompat, ToolSearchProcessor | 건너뜀 | 필요할 때 레퍼런스로 |
+| Violation callbacks | Guardrails에서 | 가드레일과 한 묶음 |
+
+나머지 페이지(Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
 
 아래 회차들의 표는 준비 단계에서 미리 적은 것(예정)이다. 진행하며 고친다.
 
@@ -273,7 +286,19 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Building, Build output, Running, Environment variables, Build-time configuration, Graceful shutdown | 다룸 (10-1) | `mastra build`·`start`, `drainTimeout` |
 | Public folder, Build process, Troubleshooting | 건너뜀 | 레퍼런스로 충분 |
 
-나머지 페이지(Processors, Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
+### Agents / Processors
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| 개념, Execution order, Attach processors | 다룸 (4-1) | 훅 시점과 순서, Memory 프로세서와의 관계 |
+| Create custom processors (processInput, processOutputStream, processOutputResult, abort) | 다룸 (4-1, 4-2) | 실무 프로세서는 대부분 커스텀 |
+| Built-in utility processors (TokenLimiter, ToolCallFilter) | 다룸 (4-3, 개념만) | Memory가 있을 때 의미. 실습은 Memory 회차로 |
+| processInputStep, processLLMRequest/Response, prepareStep | 건너뜀 | 단계별 모델 교체 같은 고급 용도 |
+| Response caching | 건너뜀 | beta |
+| Advanced patterns, API error handling, ProviderHistoryCompat, ToolSearchProcessor | 건너뜀 | 필요할 때 레퍼런스로 |
+| Violation callbacks | Guardrails에서 | 가드레일과 한 묶음 |
+
+나머지 페이지(Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
 
 ### Observability / Overview
 

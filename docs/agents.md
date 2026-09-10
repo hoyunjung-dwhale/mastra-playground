@@ -344,3 +344,110 @@ native 지원이면 아무것도 안 하고, 불확실하면 `'auto'` 한 줄, �
 
 - 옵션을 전부 모델에게 전달하나 → 모델에게 가는 것은 `schema`뿐이다. `errorStrategy`와 `fallbackValue`는 응답이 돌아온 뒤 Mastra가 검증 결과에 따라 적용하는 규칙이다.
 - `fallback`이 아니면 `fallbackValue`가 필요 없나 → 필요 없고, 넣으면 타입 오류다.
+
+## 4. Processors
+
+원문: https://mastra.ai/docs/agents/processors
+
+건너뛴 소제목: processInputStep·processLLMRequest/Response·prepareStep(단계별 모델 교체 같은 고급 용도), Response caching(beta), Advanced patterns(signals, custom stream events, metadata, workflows as processors), API error handling·ProviderHistoryCompat·ToolSearchProcessor(provider 호환 문제가 생길 때 레퍼런스로). Violation callbacks는 Guardrails에서.
+
+### 4-1. 프로세서란 무엇이고 어디서 도는가
+
+#### 개념
+
+메시지가 모델로 들어가기 전과 나온 뒤에 끼어드는 훅이다. 스프링의 필터·인터셉터 자리다.
+
+```mermaid
+flowchart TB
+    U[사용자 메시지] --> PI[processInput<br/>요청당 1회]
+    PI --> S
+    subgraph S[루프 한 바퀴]
+        direction TB
+        PIS[processInputStep] --> PLR[processLLMRequest<br/>provider 최종 프롬프트]
+        PLR --> LLM[LLM 호출]
+        LLM --> POS[processOutputStream<br/>청크마다]
+        POS --> PLS[processLLMResponse]
+        PLS --> POST[processOutputStep<br/>바퀴 끝]
+    end
+    S -- tool call 있으면 다시 --> S
+    S --> POR[processOutputResult<br/>전체 끝]
+    POR --> MEM[Memory 저장]
+```
+
+| 배열 | 언제 | 용도 |
+|---|---|---|
+| `inputProcessors` | LLM 호출 전 | 정규화, 인젝션 검사, 토큰 제한 |
+| `outputProcessors` | 응답 중(스트림)과 후 | 출력 검사, 마스킹 |
+| `errorProcessors` | LLM API 예외 시 | provider 오류 복구 |
+
+- 배열 순서대로 돈다. Memory 프로세서는 입력에서 우리 것보다 앞, 출력에서 우리 것보다 뒤에 자동으로 붙는다. 그래서 출력에서 `abort`하면 저장이 건너뛰어진다.
+- `generate`·`stream` 옵션으로 같은 배열을 넘기면 그 호출에서만 대체한다.
+- 한 프로세서 객체가 여러 훅을 같이 구현할 수 있다.
+
+#### 실습 결과
+
+- `src/mastra/processors/input-normalizer.ts`. `processInput`으로 텍스트 조각만 NFC 정규화·공백 정리. 줄바꿈은 합치지 않는다. LLM 없이 함수를 직접 불러 확인했다.
+- 메시지 구조는 `message → content → parts[] → text` 세 겹이다. 한 메시지에 텍스트·이미지·도구 호출·추론 조각이 섞이기 때문이고, assistant 턴 하나가 `parts: [tool-invocation, text]`다. Vercel AI SDK `UIMessage` 형식이다.
+- 프로세서에 들어오는 배열은 Memory 없으면 이번 메시지 하나, 있으면 이전 대화까지 합친 것이다.
+
+#### clap-agent
+
+- 입력 `[unicodeNormalizer, inputGuardrails, anthropicMessagesCacheBreakpoint]`, 출력 `[garbledTextDetector, outputGuardrails]`. `agents/clap-agent.ts:100-102` 정규화가 먼저 돌아야 가드레일이 정리된 텍스트를 보고, 캐시 마커는 마지막이어야 앞 변경까지 캐시 범위에 든다.
+- 정규화는 내장 `UnicodeNormalizer`. `collapseWhitespace: false`에 "여러 줄 붙여넣기가 뭉개진다" 주석. `agents/clap-agent.processors.ts:57-64`
+- `requestContextLogger`는 메시지를 안 바꾸고 로그만 남기는 진단용 `processInput`. `:31-37`
+- `anthropicMessagesCacheBreakpoint`는 `processLLMRequest`로 provider 요청에만 캐시 마커를 붙인다. 대화 기록에는 안 남는다.
+
+#### 헷갈렸던 지점
+
+- `...`이 뭔가 → spread. 복사하고 일부만 덮어쓴다. `toBuilder().x().build()`. 얕은 복사라 안쪽도 바꾸려면 안쪽에서 다시 쓴다.
+- 메시지 구조가 왜 세 겹인가 → 조각이 섞이기 때문. 화면 그리기, 모델 입력, 도구 조각 필터링이 조각 단위로 가능하다.
+- 이 배열은 언제 어디로 들어오나 → 사용자 메시지 한 건당 한 번, LLM 호출 직전에 Mastra가 우리 함수를 부른다.
+- Mastra 구조인가 → 훅 자리와 Memory 순서는 Mastra, 메시지 목록을 매번 통째로 보내는 것은 LLM API, `parts`는 AI SDK.
+- 저장소가 없으면 통째로 못 보내나 → 보낼 이전 메시지가 없는 것이다. 프론트엔드가 전체를 매번 보내면 저장소 없이도 된다.
+- 입력 훅은 하나인가 → 아니다. 시점마다 훅이 있다.
+
+### 4-2. 출력 프로세서와 abort
+
+#### 개념
+
+| 훅 | 언제 | 화면에 나가기 전인가 | 할 수 있는 것 |
+|---|---|---|---|
+| `processOutputStream` | 청크마다 | 예 | 실제로 막기. 청크 하나만 보여 가벼운 패턴 검사만 |
+| `processOutputStep` | 바퀴 끝 | 아니오 | `text` 검사, `abort(..., { retry: true })`로 재시도 |
+| `processOutputResult` | 전체 끝 | 아니오 | 기록에 남길 것 변경, usage 기록, `abort`로 저장 차단 |
+
+`abort(이유, 옵션)`는 tripwire다. `TripWire` 예외로 실행이 끝나고 Memory 저장을 건너뛴다. `stream`에는 `{ type: 'tripwire', payload: { processorId, reason } }` 청크, `generate`에는 `result.tripwire`와 `finishReason === 'other'`. 일반 예외와 달리 정책에 의한 정상 종료라 클라이언트가 `reason`으로 분기한다. `state`는 프로세서 id별로 격리된 요청 단위 메모다.
+
+| 방식 | 장점 | 단점 |
+|---|---|---|
+| 스트리밍 안 함 | 완전 차단 | 답이 다 될 때까지 화면이 빈 상태 |
+| 스트리밍 + 청크 검사 | 즉시 표시 | 경계에 걸친 패턴 놓침, LLM 검사 불가 |
+| 스트리밍 + 사후 검사 + 화면 교체 | 즉시 표시, 무거운 검사 | 잠깐 보였다 바뀜. 프론트엔드가 tripwire를 받아 교체 |
+
+#### 실습 결과
+
+- `src/mastra/processors/output-filter.ts`. 스트림 훅에서 내부 경로 패턴을 `***`로 가리고 `state.filtered`를 세며, 결과 훅에서 assistant 메시지 `metadata.filteredChunks`에 남긴다. LLM 없이 훅을 직접 불러 확인했다.
+- 훅은 `async`여야 한다. `Processor` 인터페이스가 Promise를 요구한다.
+
+#### clap-agent
+
+- 스트림 훅은 검출만. `garbledTextDetector`가 깨진 문자 수를 세어 경고 로그를 남기고 통과시킨다. `state`에 직전 청크 꼬리를 저장해 로그 문맥을 확보한다. `agents/clap-agent.processors.ts:74-95` 주석에 "제거로 바꾸려면 반드시 이 훅에서 해야 한다. `processOutputResult` 시점엔 델타가 이미 나간 뒤"라고 적혀 있다.
+- LLM 가드레일은 사후 비동기 검사로 경고만 남긴다(fail-open). `:240`, `:265`
+- 결과 훅은 내장 `SystemPromptScrubber`를 `redact`로 만들되 사본은 로그용으로만 쓰고 원본을 그대로 돌려준다. `:102`, `:143`
+- 응답을 바꾸지 않고 즉시 표시를 택했다. 차단은 입력 가드레일에 맡긴다. 우리 실습은 metadata에 남겼고 clap-agent는 로그에 남긴다.
+
+#### 헷갈렸던 지점
+
+- 결과 시점 검사는 이미 늦은 것 아닌가 → 맞다. 막기는 스트림 훅에서만 된다. 결과 훅은 기록·관측·저장 차단용이다.
+- tripwire가 뭔가 → `abort()`가 만드는 "정책으로 차단됨" 신호. 청크 또는 결과 필드로 클라이언트에 전달된다.
+- 스트림에서 이미 처리하는데 결과 훅은 왜 → 막는 일은 스트림에서 끝나고, 결과 훅은 총 몇 번 걸렸는지를 남기는 자리다. 집계가 필요 없으면 빼도 된다.
+- 메시지 metadata는 뭔가 → 메시지에 붙는 자유 형식 꼬리표. 모델은 안 보고, 저장되고, 프론트엔드가 받는다. 로그(운영자), metadata(프론트+기록), abort(기록 안 남음) 중 고른다.
+
+### 4-3. 내장 유틸 프로세서
+
+| 프로세서 | 하는 일 |
+|---|---|
+| `TokenLimiter(한도)` | 총 토큰이 한도를 넘으면 오래된 메시지부터 제거. system 보존 |
+| `ToolCallFilter` | 이전 대화의 도구 호출·결과 조각을 LLM 입력에서 제거. 저장본은 유지. `preserveModelOutput`으로 `toModelOutput` 결과만 남김 |
+
+Memory가 있어 대화가 쌓일 때 의미가 있다. 실습은 8회차로 미룬다. clap-agent는 둘 다 안 쓰고 Memory `lastMessages: 20`으로 개수 단위 제한, 도구 조각 크기는 `execute`에서 줄인다.
