@@ -1,0 +1,11 @@
+import { Agent } from '@mastra/core/agent';
+import { TODO_AGENT_ID } from '../constants';
+import { MODELS } from '../models';
+import { todoAgentInstructions } from './todo-agent.prompt';
+
+export const todoAgent = new Agent({
+  id: TODO_AGENT_ID,
+  name: 'Todo Agent',
+  instructions: todoAgentInstructions,
+  model: MODELS.GOOGLE_FLASH,
+});

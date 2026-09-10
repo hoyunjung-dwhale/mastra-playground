@@ -1,3 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
+import { todoAgent } from './agents/todo-agent';
+import { TODO_AGENT_KEY } from './constants';
 
-export const mastra = new Mastra({});
+export const mastra = new Mastra({
+  agents: { [TODO_AGENT_KEY]: todoAgent },
+});
