@@ -15,6 +15,8 @@ const daySummarySchema = z.object({
 const response = await agent.generate('오늘 남은 할 일을 정리해 줘', {
   structuredOutput: {
     schema: daySummarySchema,
+    errorStrategy: 'fallback',
+    fallbackValue: { summary: '지금은 정리할 수 없습니다.', remaining: [], top: '' },
   },
 });
 
