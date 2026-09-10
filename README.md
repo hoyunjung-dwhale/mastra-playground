@@ -101,6 +101,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | `agents/2-tools` | Agents 절 Tools 페이지 끝 |
 | `agents/3-structured-output` | Agents 절 Structured Output 페이지 끝 |
 | `agents/4-processors` | Agents 절 Processors 페이지 끝 |
+| `agents/5-guardrails` | Agents 절 Guardrails 페이지 끝 |
 
 ## 공식 문서에서 다룬 것과 건너뛴 것
 
@@ -149,7 +150,15 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Advanced patterns, API error handling, ProviderHistoryCompat, ToolSearchProcessor | 건너뜀 | 필요할 때 레퍼런스로 |
 | Violation callbacks | Guardrails에서 | 가드레일과 한 묶음 |
 
-나머지 페이지(Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
+### Agents / Guardrails
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| 내장 프로세서 목록, Processor strategies, Violation callbacks, Handle blocked requests | 다룸 (5-1) | 무엇이 있고 어떻게 고르는지 |
+| Speed up guardrails | 다룸 (5-2, 개념만) | clap-agent가 사후 비동기로 돌린 배경 |
+| 각 프로세서 상세 옵션 | 건너뜀 | 레퍼런스 |
+
+나머지 페이지(Human-in-the-Loop, Code Mode)는 진행하며 채운다.
 
 아래 회차들의 표는 준비 단계에서 미리 적은 것(예정)이다. 진행하며 고친다.
 
@@ -298,7 +307,15 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Advanced patterns, API error handling, ProviderHistoryCompat, ToolSearchProcessor | 건너뜀 | 필요할 때 레퍼런스로 |
 | Violation callbacks | Guardrails에서 | 가드레일과 한 묶음 |
 
-나머지 페이지(Guardrails, Human-in-the-Loop, Code Mode)는 진행하며 채운다.
+### Agents / Guardrails
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| 내장 프로세서 목록, Processor strategies, Violation callbacks, Handle blocked requests | 다룸 (5-1) | 무엇이 있고 어떻게 고르는지 |
+| Speed up guardrails | 다룸 (5-2, 개념만) | clap-agent가 사후 비동기로 돌린 배경 |
+| 각 프로세서 상세 옵션 | 건너뜀 | 레퍼런스 |
+
+나머지 페이지(Human-in-the-Loop, Code Mode)는 진행하며 채운다.
 
 ### Observability / Overview
 

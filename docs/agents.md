@@ -451,3 +451,49 @@ flowchart TB
 | `ToolCallFilter` | 이전 대화의 도구 호출·결과 조각을 LLM 입력에서 제거. 저장본은 유지. `preserveModelOutput`으로 `toModelOutput` 결과만 남김 |
 
 Memory가 있어 대화가 쌓일 때 의미가 있다. 실습은 8회차로 미룬다. clap-agent는 둘 다 안 쓰고 Memory `lastMessages: 20`으로 개수 단위 제한, 도구 조각 크기는 `execute`에서 줄인다.
+
+## 5. Guardrails
+
+원문: https://mastra.ai/docs/agents/guardrails
+
+건너뛴 소제목: 각 프로세서의 상세 옵션(레퍼런스).
+
+### 5-1. 내장 가드레일과 strategy
+
+#### 개념
+
+Processors가 틀이면 Guardrails는 그 틀에 넣는 내장 검사기다. LLM을 쓰는 것과 안 쓰는 것의 차이가 핵심이다. LLM 검사기는 요청마다 분류 호출이 하나 더 붙는다.
+
+| 프로세서 | 자리 | LLM | 하는 일 |
+|---|---|---|---|
+| `UnicodeNormalizer` | 입력 | 아니오 | 유니코드·공백 정리 |
+| `PromptInjectionDetector` | 입력 | 예 | 인젝션·탈옥 분류 |
+| `LanguageDetector` | 입력 | 예 | 언어 감지·번역 |
+| `ModerationProcessor` | 입력·출력 | 예 | 혐오·폭력 등 분류 |
+| `PIIDetector` | 입력·출력 | 예 | 개인정보 검출·마스킹 |
+| `SystemPromptScrubber` | 출력 | 예 | 새어 나온 시스템 프롬프트 제거 |
+| `TokenCostControl` | 입력 | 아니오 | 누적 비용 한도. observability storage 필요 |
+| `BatchPartsProcessor` | 출력 | 아니오 | 스트림 청크 묶기 |
+
+`strategy`가 검출 뒤 행동을 정한다. `block`만 `abort()`로 요청을 끊고(tripwire), `warn`·`detect`·`redact`·`rewrite`·`translate`는 통과시키며 무언가를 남긴다. 프로세서마다 지원하는 전략이 다르다(`ModerationProcessor`는 `block | warn | filter`). `onViolation`은 전략과 무관하게 걸릴 때마다 불리는 콜백이다.
+
+#### 실습 결과
+
+- `src/mastra/processors/guardrails.ts`. 4-1의 손 프로세서를 내장 `UnicodeNormalizer`로 교체하고(`collapseWhitespace: false`), `ModerationProcessor`를 `warn`으로 붙였다. 순서는 정규화 → 모더레이션이다.
+- 모더레이션은 `model`이 필수라 요청마다 분류 호출이 붙는다. warn으로 어떤 입력이 걸리는지 본 뒤 block으로 올리는 순서다.
+
+#### clap-agent
+
+- 분류 모델을 본체와 분리한다. `GUARDRAIL_MODEL = MODELS.OPENAI_GPT_NANO`. `agents/clap-agent.processors.ts:41` `includeScores: true`로 범주별 점수를 로그에 남겨 `threshold` 조정 근거로 쓴다. `:46`
+- LLM 검사기는 전부 사후 비동기다. `inputGuardrails`·`outputGuardrails` 래퍼가 `detachChecks`로 검사를 백그라운드에 던지고 메시지를 즉시 돌려준다. `:236-250`, `:262-272` 지연은 0이지만 `abort`가 불가능해 전략은 `warn`뿐이다(fail-open). 차단이 필요해지면 그 검사만 인라인으로 옮긴다. `:53`, `:181`
+- 인젝션 검출기를 `rewrite`가 아니라 `warn`으로 둔 이유: 오탐이면 사용자 메시지가 통째로 버려진다. `:52`
+
+### 5-2. 가드레일 지연 줄이기
+
+| 방법 | 내용 |
+|---|---|
+| 작은 모델 | 검사기에 경량 모델 지정 |
+| 병렬 실행 | 독립인 `block` 검사기를 워크플로로 묶어 동시 실행 |
+| 청크 배치 | `BatchPartsProcessor`를 출력 검사기 앞에 두어 호출 횟수 감소 |
+
+문서의 세 방법은 차단을 유지하면서 지연을 줄이는 것이고, clap-agent의 사후 비동기는 지연을 없애고 관측만 하는 것이다. 그 서비스에서 차단이 필수인지로 갈린다.
