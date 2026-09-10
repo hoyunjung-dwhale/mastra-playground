@@ -66,7 +66,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 
 | 회차 | 문서 절 | 정리 파일 | 상태 |
 |---|---|---|---|
-| 1 | Build / Agents | `docs/agents.md` | 진행 중 |
+| 1 | Build / Agents | `docs/agents.md` | 끝 |
 | 2 | Build / Memory | `docs/memory.md` | 예정 |
 | 3 | Develop, Deploy / Storage, Server | `docs/develop-deploy.md` | 예정 |
 | 4 | Observe / Trace, Metrics, Evals | `docs/observe.md` | 예정 |
@@ -103,6 +103,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | `agents/4-processors` | Agents 절 Processors 페이지 끝 |
 | `agents/5-guardrails` | Agents 절 Guardrails 페이지 끝 |
 | `agents/6-human-in-the-loop` | Agents 절 Human-in-the-Loop 페이지 끝 |
+| `agents/7-code-mode` | Agents 절 끝 |
 
 ## 공식 문서에서 다룬 것과 건너뛴 것
 
@@ -167,7 +168,12 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Supervisor agents | 건너뜀 | 범위 밖 |
 | Resuming after a restart | 건너뜀 | storage 뒤에 |
 
-나머지 페이지(Code Mode)는 진행하며 채운다.
+### Agents / Code Mode
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| When to use, How it works, Quickstart, 샌드박스 종류 | 다룸 (7-1, 개념만) | 모델이 쓴 코드를 실행하는 도구. clap-agent가 LocalSandbox를 직접 강화해 사용 |
+| Scoping tools across multiple code tools, Remote sandboxes 상세 | 건너뜀 | 필요할 때 레퍼런스로 |
 
 아래 회차들의 표는 준비 단계에서 미리 적은 것(예정)이다. 진행하며 고친다.
 
@@ -332,7 +338,12 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | Supervisor agents | 건너뜀 | 범위 밖 |
 | Resuming after a restart | 건너뜀 | storage 뒤에 |
 
-나머지 페이지(Code Mode)는 진행하며 채운다.
+### Agents / Code Mode
+
+| 소제목 | 처리 | 이유 |
+|---|---|---|
+| When to use, How it works, Quickstart, 샌드박스 종류 | 다룸 (7-1, 개념만) | 모델이 쓴 코드를 실행하는 도구. clap-agent가 LocalSandbox를 직접 강화해 사용 |
+| Scoping tools across multiple code tools, Remote sandboxes 상세 | 건너뜀 | 필요할 때 레퍼런스로 |
 
 ### Observability / Overview
 

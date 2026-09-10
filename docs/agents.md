@@ -518,6 +518,103 @@ Processors가 틀이면 Guardrails는 그 틀에 넣는 내장 검사기다. LLM
 - 승인은 사람이 본 `toolName + args` 지문에 묶고 `beforeToolCall`에서 대조하는 것이 안전하다.
 - `askUserTool`이 `suspend()` 방식의 내장 도구다.
 
+#### 코드 예시
+
+```typescript
+// 도구 정의에 붙인다. 이 도구는 execute 전에 항상 멈춘다
+export const completeTodoTool = createTool({
+  id: 'complete-todo',
+  // ...
+  requireApproval: true,
+  execute: async ({ id }) => { /* 승인되어야 실행 */ },
+});
+
+// 호출 쪽이 멈춤을 받아 승인·거절한다
+const stream = await agent.stream('1번 끝냈어');
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {            // args 에 { id: 1 }
+    const ok = await askHuman(chunk.payload.args);
+    const next = ok
+      ? await agent.approveToolCall({ runId: stream.runId })
+      : await agent.declineToolCall({ runId: stream.runId, reason: '사용자가 취소함' });
+    for await (const c of next.textStream) process.stdout.write(c);
+  }
+}
+
+// 도구를 고치지 않고 호출 한 번에만 걸 때
+await agent.stream('정리해 줘', { requireToolApproval: true });
+await agent.stream('정리해 줘', { requireToolApproval: ({ toolName }) => toolName === 'completeTodoTool' });
+```
+
 #### clap-agent
 
 - 쓰지 않는다. 도구가 전부 조회라 승인할 행동이 없다. 파일 삭제·셸 실행 도구가 있는 harness 템플릿에는 `requireApproval`이 기본으로 걸려 있었다.
+
+#### 헷갈렸던 지점
+
+- `requireApproval`은 어디에 있나 → `createTool` 옵션이다. 호출 옵션 `requireToolApproval`은 그 호출의 모든 도구(또는 함수로 조건부)에 건다.
+
+## 7. Code Mode
+
+원문: https://mastra.ai/docs/agents/code-mode (beta)
+
+개념만 봤다. 건너뛴 소제목: Scoping tools across multiple code tools, Remote sandboxes 상세.
+
+### 7-1. 모델이 쓴 코드를 실행하는 도구
+
+#### 개념
+
+람다와 비슷하다. 코드를 받아 격리된 환경에서 실행하고 결과를 돌려준다. 차이는 그 코드를 모델이 그 자리에서 쓴다는 것이다.
+
+tool calling 규약 위에서 그대로 돌아간다. `createCodeMode()`가 만드는 `execute_typescript`는 인자 스키마가 `{ code: string }`인 도구 하나다. `addTodoTool`이 `title` 문자열을 받듯 이 도구는 `code` 문자열을 받고, 그 문자열이 소스 코드일 뿐이다. 모델은 system prompt에 붙은 `external_*` 함수 목록(우리 도구의 입출력 스키마를 TypeScript 타입 선언으로 바꾼 것)을 보고 코드를 쓴다.
+
+```
+사용자: "미완료 할 일 전부 완료 처리해 줘"
+  → 모델의 tool call: execute_typescript { code: "
+        const todos = await external_listTodosTool({ done: false });
+        await Promise.all(todos.map(t => external_completeTodoTool({ id: t.id })));
+        return { completed: todos.length };" }
+  → Mastra가 code를 샌드박스에서 실행. external_* 호출마다 호스트의 진짜 도구 execute가 돈다
+  → return 값 { completed: 3 } 만 도구 결과로 모델에게
+  → 모델: "미완료 할 일 3개를 완료 처리했습니다."
+```
+
+| 얻는 것 | 이유 |
+|---|---|
+| 왕복 감소 | 도구 결정마다 돌던 루프가 도구 호출 한 번으로 |
+| 컨텍스트 감소 | 도구 원본 결과는 샌드박스 안에서 줄이고 return 값만 모델에게 |
+| 정확한 계산 | 합계·평균이 JS로 계산 |
+| 병렬 | `Promise.all` |
+
+`createCodeMode({ tools })`에 넘긴 도구만 코드에서 부를 수 있다. 한 번 부르고 끝나는 도구는 묶어도 이득이 없다.
+
+#### 샌드박스
+
+모델이 쓴 코드를 실행하므로 실행 경계를 반드시 고른다.
+
+| | `LocalSandbox` | `IsolatedVmCodeModeTransport` | `QuickJsCodeModeTransport` | 원격(E2B) |
+|---|---|---|---|---|
+| 실행 위치 | 호스트 자식 `node` 프로세스 | 같은 프로세스 안 V8 isolate | 같은 프로세스 안 wasm QuickJS | 별도 micro-VM |
+| 코드가 접근할 수 있는 것 | 호스트 권한 전부 | `external_*`뿐 | `external_*`뿐 | 그 VM 안 |
+| 설치 부담 | 없음 | 네이티브 애드온 + `--no-node-snapshot` | 없음 | 외부 서비스 |
+| 속도 | 빠름 | 빠름 | 느림 | 네트워크 왕복 |
+| 쓰는 곳 | 로컬·신뢰 환경 | 운영 기본 | 서버리스 | 완전 분리·무거운 작업 |
+
+#### clap-agent
+
+- 쓴다. 팬아웃·집계가 일어나는 조회 도구와 계산 도구만 넣는다. resolver처럼 한 번 부르고 끝나는 도구는 뺀다. `agents/clap-agent.code-mode.ts`의 `CLAP_CODE_MODE_TOOLS` 주석
+- 본체 절대 규칙 "수치를 직접 계산하지 않는다"가 코드 안 계산까지 얼어붙게 해서, 코드 모드 전용 지시로 "토큰 계산 금지 규칙이지 JS 계산에는 해당 없다. 인용할 통계는 `external_calculate_statistics`로"를 덧붙인다. 팩토리 에러 객체를 정상 응답으로 읽으면 프로그램이 죽으므로 "`error === true`를 먼저 확인하라"도 덧붙인다.
+- 샌드박스는 `LocalSandbox`를 직접 단단하게 만든 것이다. `:250-285`
+  - 이유: 배포 환경(Fargate) 커널이 네임스페이스 생성을 막아 bwrap 격리 불가(ECS exec 실측).
+  - Node permission model을 `NODE_OPTIONS`로 걸어 파일 읽기(프로그램 파일 제외)·쓰기·자식 프로세스를 끊는다. 호스트 env 유출 경로(`/proc/1/environ`)가 막힌다.
+  - 네트워크는 permission model 밖이라 preload 스크립트(`clap-agent.code-mode.harden.ts`)가 허용 목록 밖 모듈 import를 전부 막는다. 차단 목록 방식은 레거시 모듈로 소켓이 뚫렸다(실측).
+  - `CallLimitedTransport`가 `external_*` 호출 횟수를 세어 상한(200)을 넘는 호출만 실패시킨다. 계산 도구는 API를 안 치므로 세지 않는다. `:79-95`
+  - 타임아웃 60초, 힙 128MB, 동시 실행 4. `constants.ts:16-27`
+- 새로 시작한다면 isolate나 QuickJS를 먼저 검토하는 것이 문서의 권고다.
+
+#### 헷갈렸던 지점
+
+- 코드 모드가 정확히 뭔가 → 인자가 소스 코드인 도구 하나를 도구 목록에 넣는 것. 모델이 그 코드를 쓰고 우리가 실행한다.
+- "도구의 인자가 프로그램 문자열"이 뭔 소린가 → `addTodoTool`의 인자가 `title` 문자열이듯 이 도구의 인자는 `code` 문자열이고 내용이 코드일 뿐이다.
+- 모델이 코드를 작성해서 보내나 → 그렇다. system prompt에 붙은 `external_*` 타입 선언을 보고 쓴다.
+- 우리 도구를 쓰는 코드를 짤 수 있나 → `createCodeMode({ tools })`에 넘긴 도구만.
