@@ -103,3 +103,115 @@ Claude Code가 이 루프 그대로다. Bash나 WebFetch 호출이 tool call이�
 - 그 보조 에이전트는 등록하지 않고 파일 안에서 만든 객체를 직접 쓴다. (`:33-38`) 메모리도 storage도 필요 없는 일회성 변환기라 공유 자원이 없어도 된다. 모델은 싼 `OPENAI_GPT_MINI`.
 - 모델 출력은 `sanitizeHtml`로 정리한다. (`:55-68`) 코드펜스 제거와 XSS 방지를 코드로 강제한다.
 - `stream` 호출은 코드에 없다. 프론트엔드가 서버 엔드포인트를 직접 부른다. 평가는 `runEvals`에 에이전트를 `target`으로 넘긴다. (`evals/safety-evals.ts:33`)
+
+## 2. Tools
+
+원문: https://mastra.ai/docs/agents/tools
+
+건너뛴 소제목: When to use tools(자명), Valibot·ArkType(zod만 씀), Agents/Workflows as tools(별도 문서 범위), Share tools·Streaming hooks·Control tool selection·Built-in tools(레퍼런스로 충분), Run logic around tool calls(clap-agent 미사용, 차단은 Guardrails에서).
+
+### 2-1. 도구 정의와 에이전트 연결
+
+#### createTool의 다섯 필드
+
+| 필드 | 모델이 보는가 | 역할 |
+|---|---|---|
+| `id` | 아니오 | 트레이스·로그·CLI에서 도구를 가리키는 식별자 |
+| `description` | 예 | 모델이 "언제 이 도구를 쓸지" 판단하는 근거 |
+| `inputSchema` | 예 | 모델이 만들어야 할 인자의 형태. JSON Schema로 변환되어 전달된다 |
+| `outputSchema` | 아니오 | 실행 결과 검증과 `execute` 반환 타입 추론 |
+| `execute` | 아니오 | 우리 코드. `execute(inputData, context)` 한 가지 시그니처뿐이다 |
+
+`context`에는 `requestContext`(요청별 데이터), `abortSignal`(취소), `mastra`(인스턴스)가 있고, 안 쓰면 생략한다.
+
+#### 모델이 실제로 받는 형태
+
+Mastra는 도구마다 아래 JSON을 만들어 LLM 요청에 실어 보낸다. `id`는 어디에도 없다.
+
+```json
+{
+  "name": "listTodosTool",
+  "description": "저장된 할 일 목록을 조회한다. 할 일이 뭔지, 남은 게 있는지 물으면 호출한다.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "done": {
+        "description": "생략 시 전체, true면 완료된 것만, false면 완료되지 않은 것만 보여준다.",
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  }
+}
+```
+
+| 우리 코드 | JSON의 자리 |
+|---|---|
+| `tools: { listTodosTool }`의 키 | `name` |
+| `createTool`의 `description` | `description` |
+| `inputSchema` | `parameters` |
+| `.describe('...')` | 필드의 `description` |
+| `.optional()` | `required` 목록에서 빠짐 |
+
+#### 도구 이름은 id가 아니라 객체 키다
+
+`tools`는 `Map<String, Tool>`이고, 키가 모델에게 보이는 함수 이름이다. `id`는 도구 객체 안의 필드일 뿐이다. 일부러 다르게 할 필요는 없고, 관례를 하나로 정하면 된다. 우리는 clap-agent와 같이 키는 변수명(camelCase), `id`는 kebab-case로 두고, system prompt에서는 키 이름으로 언급한다.
+
+#### zod
+
+TypeScript 타입은 실행 시점에 사라지므로, 밖에서 들어온 JSON(모델이 만든 인자)을 실행 중에 검증할 수단이 필요하다. zod 스키마는 값이라서 실행 중에도 남아 있고, `parse`로 검증하며, `z.infer`로 컴파일 시점 타입도 뽑는다. 하나의 정의로 JSON Schema 생성·런타임 검증·타입 추론 셋을 다 만든다.
+
+| | Java | TypeScript + zod |
+|---|---|---|
+| 타입 정의 | `class Todo` | `todoSchema` |
+| 실행 중 검증 | Jackson + Bean Validation | `todoSchema.parse(값)` |
+| 컴파일 시 타입 | `Todo` | `z.infer<typeof todoSchema>` |
+
+#### 실습 결과
+
+- `src/mastra/todo/todo.schema.ts`(스키마와 타입), `src/mastra/todo/todo-store.ts`(메모리 배열), `src/mastra/tools/add-todo-tool.ts`, `src/mastra/tools/list-todos-tool.ts`.
+- description은 "무엇을 하는지 → 언제 부르는지" 순서로 쓴다. 예시 발화만 나열하면 다른 표현에 약하다.
+- Studio에서 추가·조회 요청 모두 도구 호출 카드가 보였다. 1-3에서 도구 없이 "추가한 척"하던 것과의 차이가 tool calling이다.
+
+#### clap-agent
+
+- 도구 36개가 `src/mastra/tools/` 아래 파일 하나에 하나씩. 파일명과 `id`가 kebab-case로 일치한다. 에이전트에 붙이는 레코드는 `agents/clap-agent.tools.ts`에 따로 모았고, 파일 맨 위 주석이 "키(camelCase)가 toolName이다"라는 함정을 적어 두었다.
+- `createTool`을 직접 쓰지 않고 `createClapTool` 팩토리로 감싼다. `src/mastra/tools/clap-tool-factory.ts:69-` `execute`가 던진 `ClapApiError`를 `{ error: true, status, guidance }` 객체로 바꿔 모델에게 결과로 준다. 예외 원문 대신 "같은 인자로 재시도하지 말고 ID를 다시 찾아라" 같은 행동 지시를 주어야 모델이 복구한다는 경험(PR #229)에서 나왔다.
+- 예상한 실패(`ClapApiError`)만 에러 객체로 바꾸고 그 외 예외는 다시 던진다. `:83-85` 에러 객체로 바꾸면 span이 성공으로 닫히므로 로거에 따로 남긴다. `:86-93`
+- `execute`의 둘째 인자에서 `requestContext`를 꺼내 인증과 기본값에 쓰고, `requestContextSchema`로 그 형태까지 선언한다. `get-review-group-tool.ts:32-35`
+- 도구가 예외를 던지면 지금 core(1.65.0)는 `TOOL_EXECUTION_FAILED`로 감싸 던지고, 루프는 그 오류를 `tool-error` 청크와 `output-error` 상태의 도구 호출로 기록한 뒤 이어진다. clap-agent 주석은 "스트림 전체가 끊긴다"고 하는데 당시 버전 차이일 수 있어, 실제로 `throw`를 넣어 확인하는 것이 확실하다.
+
+### 2-2. 스키마와 description 작성
+
+2-1에서 대부분 다뤘으므로 코드 추가로 대체했다. 지침은 세 줄이다.
+
+- `description`: 무엇을 하는지 → 언제 부르는지 → 비슷한 도구와의 구분. 도구별 안내는 description에, 도구 횡단 정책만 system prompt에 둔다.
+- 필드 `describe`: 값의 의미, 생략 시 동작, 어디서 얻는 값인지.
+- `outputSchema`: 반환 형태가 여럿이면 union으로 선언한다. 검증에 실패하면 결과가 대체되기 때문이다.
+
+#### 실습 결과
+
+- `src/mastra/tools/complete-todo-tool.ts`. 없는 id면 예외 대신 `{ error: true, guidance }`를 돌려주고 `outputSchema`를 `z.union([todoNotFoundSchema, todoSchema])`로 선언했다.
+- `true as const`: `true`는 `boolean`으로 넓혀지므로 `z.literal(true)`와 맞추려면 리터럴 타입으로 고정해야 한다.
+- 합 타입(`A | B`)은 관계없는 두 타입을 그 자리에서 묶는다. `'error' in result`로 어느 쪽인지 좁힌다.
+- union 순서는 에러 스키마가 앞이다. `z.object`는 모르는 키를 조용히 버리고 `z.union`은 앞에서부터 처음 통과한 것을 쓰므로, 정상 스키마의 필드가 전부 optional이면 에러 객체가 `{}`로 잘린다. 직접 돌려 확인했다.
+
+#### clap-agent
+
+- 팩토리가 `z.union([clapApiToolErrorSchema, opts.outputSchema])`로 에러 스키마를 앞에 둔다. `clap-tool-factory.ts:96-99` 이유가 주석에 있다.
+- description은 "현재 대화의 리뷰 그룹 정보를 조회한다. … 사용자가 '리뷰 이름'처럼 요청하면 호출한다" 순서다. `get-review-group-tool.ts:17-18`
+
+### 2-3. 도구 결과가 컨텍스트를 차지하는 문제
+
+도구 결과는 통째로 메시지 목록에 들어가 루프가 도는 내내 토큰을 차지한다.
+
+| 방식 | 모델이 보는 것 | 앱이 받는 것 | 화면·기록 |
+|---|---|---|---|
+| `execute`에서 줄임 | 줄인 것 | 줄인 것 | 줄인 것 |
+| `toModelOutput` | 줄인 것 | 원본 | 원본 |
+| `transform` | 원본 | 원본 | 가린 것 |
+
+#### clap-agent
+
+- 둘 다 쓰지 않고 `execute`에서 줄인다. 응답 대부분을 차지하는 작성자 정보를 축약 유저로 바꾸고, 모델이 보면 안 되는 `available`은 뺀다. `get-review-group-tool.ts:50-58`
+- 프론트엔드가 도구 결과 원본을 쓰지 않으므로 `toModelOutput`이 필요 없고, 민감 값은 트레이스 단계의 `SensitiveDataFilter`로 가리므로 도구별 `transform`이 필요 없다. (추정)

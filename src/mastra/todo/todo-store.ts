@@ -16,3 +16,12 @@ export function listTodos(done?: boolean): Todo[] {
   }
   return todos.filter((todo) => todo.done === done);
 }
+
+export function completeTodo(id: number): Todo | undefined {
+  const todo = todos.find((item) => item.id === id);
+  if (!todo) {
+    return undefined;
+  }
+  todo.done = true;
+  return todo;
+}
