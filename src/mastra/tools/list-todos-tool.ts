@@ -5,11 +5,12 @@ import { listTodos } from '../todo/todo-store';
 
 export const listTodosTool = createTool({
   id: 'list-todos',
-  // TODO: 어떤 요청에 쓰는지 적는다.
-  description: '',
+  description: '저장된 할 일 목록을 조회한다. 할 일이 뭔지, 남은 게 있는지 물으면 호출한다.',
   inputSchema: z.object({
-    // TODO: 생략하면 전체, true면 완료, false면 미완료라는 것을 모델이 알게 적는다.
-    done: z.boolean().optional().describe(''),
+    done: z
+      .boolean()
+      .optional()
+      .describe('생략 시 전체, true면 완료된 것만, false면 완료되지 않은 것만 보여준다.'),
   }),
   outputSchema: z.array(todoSchema),
   execute: async ({ done }) => listTodos(done),
