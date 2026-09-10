@@ -99,6 +99,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 |---|---|
 | `agents/1-overview` | Agents 절 Overview 페이지 끝 |
 | `agents/2-tools` | Agents 절 Tools 페이지 끝 |
+| `agents/3-structured-output` | Agents 절 Structured Output 페이지 끝 |
 
 ## 공식 문서에서 다룬 것과 건너뛴 것
 

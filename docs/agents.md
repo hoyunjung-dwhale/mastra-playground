@@ -250,3 +250,97 @@ TypeScript 타입은 실행 시점에 사라지므로, 밖에서 들어온 JSON(
 
 - clap-agent는 왜 `toModelOutput`·`transform`을 안 쓰나 → 프론트엔드가 도구 결과 원본을 쓰지 않아 `execute`에서 줄이면 충분하고, 민감 값은 트레이스 단계의 `SensitiveDataFilter`로 가린다. (추정)
 
+
+## 3. Structured Output
+
+원문: https://mastra.ai/docs/agents/structured-output
+
+건너뛴 소제목: Valibot·ArkType·JSON Schema(zod만 씀), Stream structured output·`useAgent`·`prepareStep`(필요할 때 레퍼런스로 충분).
+
+### 3-1. 응답을 객체로 받기
+
+#### 개념
+
+모델의 답을 자유 텍스트 대신 정해진 JSON 형태로 받는다. 요청에 JSON Schema를 실어 보내면 provider가 디코딩 단계에서 형태를 제약하므로(OpenAI `response_format`, Gemini `responseSchema`), 프롬프트로 "JSON으로 답해"라고 부탁하는 것보다 안정적이다. tool calling과 같은 기술의 다른 용도다.
+
+| | tool calling | structured output |
+|---|---|---|
+| 모델이 JSON을 만드는 목적 | 함수 인자 | 최종 답 |
+| JSON을 받는 쪽 | 우리 코드가 실행하고 결과를 모델에게 돌려줌 | 우리 코드가 그대로 씀. 루프 끝 |
+| 스키마 자리 | 도구의 `inputSchema` | `structuredOutput.schema` |
+
+```typescript
+const response = await agent.generate('오늘 남은 할 일을 정리해 줘', {
+  structuredOutput: { schema: daySummarySchema },
+});
+response.object; // 스키마에서 추론된 타입. text도 함께 온다
+```
+
+호출 옵션으로 넘기거나, 에이전트의 `defaultOptions.structuredOutput`에 두어 모든 호출에 적용한다. 쓰는 자리는 답을 사람이 읽지 않고 **다음 코드가 소비**할 때다. 화면에 구조대로 그리기, 분류해서 분기하기, 자유 텍스트에서 필드 뽑기, LLM 채점 결과를 숫자로 받기가 전형이다. 채팅 답변처럼 사람이 그대로 읽는 텍스트에는 쓰지 않는다.
+
+#### 실습 결과
+
+- `scripts/structured-output.ts`, 실행은 `npm run structured`. Studio 채팅창은 호출 옵션을 못 붙이므로 스크립트로 한다.
+- `[object]`에 스키마 형태의 객체가, `[text]`에 모델이 만든 JSON 문자열이 왔다. `steps: 2`로 도구(`listTodosTool`)를 부른 뒤 JSON으로 답했다. Gemini 3.6 Flash는 도구와 structured output을 한 호출에서 같이 처리한다.
+
+#### clap-agent
+
+- 사내규정 에이전트가 `defaultOptions.structuredOutput`으로 항상 `{ answer, citations }`를 낸다. `src/mastra/agents/policy-agent.ts:31-37`, 스키마는 `policy-agent.schema.ts:10-13` 프론트엔드가 인용을 별도 요소로 그린다.
+- 호출 코드가 없다. 프론트엔드가 Mastra 서버 엔드포인트를 부르므로 호출 옵션을 넘길 자리가 없어 에이전트 기본값으로 걸었다.
+- 리뷰 질의응답 에이전트(Clap Agent)는 텍스트 답이라 쓰지 않는다. 같은 프로젝트 안에서도 "다음 코드가 소비하는가"로 갈린다.
+
+#### 헷갈렸던 지점
+
+- structured output이 뭔가 → 답의 형태를 API 수준에서 고정하는 것. 모델은 JSON만 생성하고 우리는 파싱·검증된 객체를 받는다.
+- 실제로 `generate`를 호출해서 쓰나 → 에이전트를 부르는 자리는 셋이다. Mastra 서버 엔드포인트(프론트엔드가 HTTP로, 우리 코드에 호출 없음), 우리 API 라우트·서비스 코드, 도구·워크플로·스크립트 안. 채팅 제품은 첫째가 대부분이고, 배치·분류·평가는 둘째·셋째다.
+- 채팅 구조로 바꾸면 코드가 어떻게 되나 → 스키마를 `defaultOptions`로 옮기고, 호출은 프론트엔드의 `POST /api/agents/:id/generate`(또는 `/stream`)가 된다. 요청 본문에 JSON Schema를 실어 요청마다 바꿀 수도 있다. 대화도 하는 에이전트에 기본값으로 걸면 인사에도 JSON으로 답하므로, 요약 전용 에이전트를 따로 두거나 요청마다 실어 보낸다.
+- 스키마는 루프의 매 LLM 호출에 붙는다. 도구를 부른 바퀴에서는 JSON 답이 안 나오고, 도구 결과를 받은 바퀴에서 나온다.
+
+### 3-2. 도구와 함께 쓸 때의 제약
+
+#### 개념
+
+LLM 요청 한 번에 `tools`(부를 수 있는 함수)와 `responseSchema`(답의 형태)가 같이 실린다. 일부 모델 API는 둘을 동시에 받지 못한다. Gemini 2.5가 그랬고 오류는 `Function calling with a response mime type: 'application/json' is unsupported`다. 3.6 Flash는 문제없었다.
+
+| 우회책 | 방법 | 비용 |
+|---|---|---|
+| `jsonPromptInjection: 'auto'` | API 파라미터 대신 스키마 지시를 프롬프트에 넣는다. `'auto'`면 Mastra가 모델 능력표를 보고 고른다 | 호출 수 그대로. 형식 보장이 약해진다 |
+| `structuredOutput.model` | 본체는 텍스트로 답하고 두 번째 모델이 객체로 바꾼다 | LLM 호출 한 번 추가 |
+| `prepareStep` | 단계 0은 도구만, 그 뒤는 structured output만 | 코드가 늘어난다 |
+
+native 지원이면 아무것도 안 하고, 불확실하면 `'auto'` 한 줄, 형식이 자주 깨지면 `model`을 따로 둔다. 실습 없음.
+
+#### clap-agent
+
+- Anthropic·OpenAI 모델을 쓰고 우회 옵션 없이 `schema`만 둔다. `policy-agent.ts:33-36` 두 provider 모두 함께 지원한다.
+
+#### 헷갈렸던 지점
+
+- 뭔 소린지 모르겠다 → 요청 한 번에 "이 함수들을 부를 수 있다"와 "최종 답은 이 JSON으로"가 같이 들어가는데, 그 조합을 거절하는 API가 있다는 이야기다. 우회책은 둘을 한 요청에 같이 넣지 않는 방법들이다.
+
+### 3-3. 검증 실패 처리
+
+#### 개념
+
+모델의 JSON이 스키마 검증에 실패했을 때 Mastra가 무엇을 돌려줄지를 `errorStrategy`로 정한다.
+
+| 값 | `object`에 오는 것 | 쓰는 경우 |
+|---|---|---|
+| `'strict'` (기본) | 예외 | 코드가 받는 경우. 잘못된 객체로 진행하는 것보다 실패가 낫다 |
+| `'warn'` | 검증 안 된 값 그대로 + 경고 로그 | 실험·로그 용도 |
+| `'fallback'` | `fallbackValue` | 사용자가 보는 경우. 빈 화면 대신 안내 문구 |
+
+`fallbackValue`는 `'fallback'`일 때만 필수이고 다른 전략에서는 넣으면 컴파일 오류다. 타입이 두 갈래로 나뉘어 있다. `@mastra/core/dist/agent/types.d.ts:312-316`
+
+#### 실습 결과
+
+- `scripts/structured-output.ts`에 `errorStrategy: 'fallback'`과 `fallbackValue`를 추가했다. `fallbackValue`에서 필드를 빼면 컴파일 오류가 난다.
+
+#### clap-agent
+
+- 사내규정 에이전트가 `'fallback'`이다. `policy-agent.ts:34-35` 대체 값은 "확인할 수 없다"는 안내와 빈 인용 목록이라 프론트엔드 인용 코드가 그대로 동작한다. 안내 문구는 모델이 근거를 못 찾았을 때의 문구 상수를 재사용한다.
+
+#### 헷갈렸던 지점
+
+- 옵션을 전부 모델에게 전달하나 → 모델에게 가는 것은 `schema`뿐이다. `errorStrategy`와 `fallbackValue`는 응답이 돌아온 뒤 Mastra가 검증 결과에 따라 적용하는 규칙이다.
+- `fallback`이 아니면 `fallbackValue`가 필요 없나 → 필요 없고, 넣으면 타입 오류다.
