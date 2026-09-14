@@ -47,8 +47,8 @@ Studio는 등록된 에이전트와 대화하고 도구 호출 과정을 보는 
 src/mastra/
   index.ts              Mastra 인스턴스. 에이전트를 여기에 등록한다
   constants.ts          에이전트 id·등록 키
-  models.ts             모델 문자열 상수 (타입으로 오타 방지)
-  storage.ts            대화를 저장할 libSQL 어댑터. Studio와 스크립트가 같은 파일을 보도록 절대 경로
+  models.ts             모델·임베딩 모델 문자열 상수 (타입으로 오타 방지)
+  storage.ts            libSQL storage와 벡터 저장소. Studio와 스크립트가 같은 파일을 보도록 절대 경로
   agents/
     todo-agent.ts       할 일 관리 에이전트
     todo-agent.prompt.ts  system prompt

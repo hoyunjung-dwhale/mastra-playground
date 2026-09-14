@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
 // mastra dev는 서버를 src/mastra/public에서 실행하고(MASTRA_PROJECT_ROOT로 루트를 알려 준다)
 // npm run call은 프로젝트 루트에서 실행하므로, 상대 경로 file:./mastra.db 를 쓰면 두 프로세스가
@@ -12,5 +12,12 @@ const url = process.env.DATABASE_URL || localFileUrl;
 
 export const storage = new LibSQLStore({
   id: 'mastra-storage',
+  url,
+});
+
+// semantic recall의 임베딩 저장소. storage와 달리 Mastra 인스턴스가 물려주지 않아
+// Memory 생성자에 직접 넘겨야 한다. libSQL은 같은 파일에 벡터 테이블을 둔다.
+export const vector = new LibSQLVector({
+  id: 'mastra-vector',
   url,
 });

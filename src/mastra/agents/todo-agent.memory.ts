@@ -1,8 +1,12 @@
 import { Memory } from '@mastra/memory';
-import { MODELS } from '../models';
+import { EMBEDDING_MODELS, MODELS } from '../models';
+import { vector } from '../storage';
 
 // storage는 Mastra 인스턴스에 등록한 것을 물려받는다. (src/mastra/index.ts)
 export const todoAgentMemory = new Memory({
+  // semantic recall에만 쓰인다. 벡터 저장소는 Mastra 인스턴스가 물려주지 않는다.
+  vector,
+  embedder: EMBEDDING_MODELS.GOOGLE,
   options: {
     // 응답이 나간 뒤 비동기로 도는 별도 LLM 호출이다. 스레드마다 한 번만 돌고,
     // 에이전트 instructions는 실리지 않는다.
@@ -34,6 +38,9 @@ export const todoAgentMemory = new Memory({
         '- 자주 쓰는 분류: [최대 3개]',
       ].join('\n'),
     },
+    // LLM 호출 전에 새 메시지를 임베딩해 비슷한 과거 메시지를 찾아 넣고, 응답 뒤에
+    // 이번 턴 메시지를 임베딩해 저장한다. 턴마다 임베딩 호출과 벡터 조회가 붙는다.
+    semanticRecall: true,
     observationalMemory: {
       // 기본값 google/gemini-2.5-flash를 쓰지 않고 명시한다. Google이 새 사용자에게
       // 막아 둔 모델이라 그대로 두면 provider가 호출을 거부한다. (7회차 1-2)
