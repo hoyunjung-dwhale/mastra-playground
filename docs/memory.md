@@ -297,6 +297,104 @@ Assistant: 홍길동님, '내일 오전 회의 준비'를 할 일 목록에 추�
 
 - 제목 호출에 에이전트 프롬프트가 실리나 → 실리지 않는다. 언어와 형식 규칙을 제목 지침에 다시 적어야 한다.
 
+### 2-2. 스레드와 메시지 조회
+
+#### 개념
+
+에이전트를 부르지 않고 저장된 것만 읽는 경우다. 채팅 UI의 대화 목록 화면, 지난 대화를 열었을 때 메시지를 불러오는 화면이 여기 해당한다. `agent.getMemory()`로 `Memory` 인스턴스를 얻어 직접 조회한다.
+
+| 메서드 | 대상 | 돌려주는 값 |
+|---|---|---|
+| `listThreads` | 대화방 목록 | 스레드 배열과 `total`, `page`, `perPage`, `hasMore` |
+| `getThreadById` | 대화방 하나 | 스레드 객체 또는 `null` |
+| `recall` | 그 방 안의 메시지 | 메시지 배열과 페이징 정보 |
+
+`getThreadById`와 `recall`은 겹치지 않는다. 스레드 객체에는 id, 제목, 소유자, 생성·수정 시각, metadata만 들어 있고 메시지는 없다. (`node_modules/@mastra/core/dist/memory/types.d.ts:34-41`) 화면으로 보면 왼쪽 대화 목록이 `listThreads`, 오른쪽 대화 내용이 `recall`이고, `getThreadById`는 목록에서 하나를 클릭했을 때 그 방이 실재하는지와 내 것이 맞는지 확인하는 자리다.
+
+`recall`은 단순 조회만 하지 않는다. `vectorSearchString`을 넘기면 semantic recall이 함께 돌아 의미가 비슷한 과거 메시지를 찾아 섞어 준다. 이름이 `listMessages`가 아닌 이유다.
+
+#### 접근 제어는 앱 몫이다
+
+`listThreads`의 `filter`도 `filter.resourceId`도 타입상 선택이다. (`node_modules/@mastra/core/dist/storage/types.d.ts:167-177`) 빠뜨리면 오류가 나는 것이 아니라 모든 사용자의 스레드가 그대로 나온다. 경고도 없다.
+
+`recall`에 `resourceId`를 함께 넘기는 것은 방어 장치다. 넘기면 스레드 소유자와 다를 때 걸러 주고, 넘기지 않으면 스레드 id만 맞으면 남의 메시지도 나온다.
+
+Spring으로 치면 `@PreAuthorize`에 해당하는 장치가 라이브러리에 없다는 뜻이다. "지금 로그인한 사용자가 이 `resourceId`의 주인인가"는 앱 코드가 검사해야 한다.
+
+#### 프런트엔드는 어떻게 부르나
+
+이 메서드들은 서버에서 돈다. DB 접속 정보를 들고 있으므로 브라우저에서 직접 부를 수 없다. 프런트엔드는 HTTP로 서버를 부르고, 서버가 이 메서드를 호출한다.
+
+`@mastra/server`가 메모리 조회 경로를 기본으로 열어 둔다. (`node_modules/@mastra/server/dist/memory-CBLqn9xl.js:169-229`)
+
+| 메서드와 경로 | 하는 일 |
+|---|---|
+| `GET /memory/threads` | 스레드 목록 |
+| `GET /memory/threads/:threadId` | 스레드 하나 |
+| `GET /memory/threads/:threadId/messages` | 그 스레드의 메시지 |
+| `GET /memory/threads/:threadId/working-memory` | working memory 값 |
+| `DELETE /memory/threads/:threadId` | 스레드 삭제 |
+
+`npm run dev`로 서버를 띄우고 `http://localhost:4111/swagger-ui`를 열면 전체 목록을 보고 바로 호출해 볼 수 있다.
+
+기본 경로를 그대로 쓰면 문제가 하나 있다. `resourceId`를 쿼리 파라미터로 받으므로 브라우저가 그 값을 정한다. 남의 `resourceId`를 넣으면 남의 대화 목록이 나온다. 인증을 어디서 거는지가 핵심이고, 9회차 Server 절에서 미들웨어와 커스텀 라우트로 다룬다.
+
+#### 페이징 방식
+
+오프셋 방식이다. 커서 방식이 아니다. libSQL 구현이 `LIMIT ? OFFSET ?`로 끝난다. (`node_modules/@mastra/libsql/dist/index.js:8533`)
+
+| 인자 | 뜻 | 기본값 |
+|---|---|---|
+| `page` | 몇 번째 쪽인가. 0부터 센다 | 0 |
+| `perPage` | 한 쪽에 몇 개인가 | 100 |
+| `perPage: false` | 페이징 없이 전부 가져온다 | |
+
+`hasMore`가 참인 동안 `page`를 올려 가며 이어 붙이면 무한 스크롤이 된다. 다만 오프셋 방식의 약점을 그대로 받는다. 목록을 보는 중에 옛 대화에 메시지가 하나 들어오면 그 스레드가 맨 위로 올라오고, 그 상태에서 다음 쪽을 부르면 이미 본 항목이 다시 나오거나 못 본 항목이 건너뛰어진다. 뒤쪽 쪽으로 갈수록 느려지는 것도 같은 이유다.
+
+구현이 쪽마다 `COUNT(*)`를 한 번 더 돌린다는 점도 알아 둘 만하다. (`:8518`) `total`을 채우기 위해서인데, 무한 스크롤이라면 총 개수가 화면에 필요 없는 경우가 많다.
+
+#### 실습 결과
+
+`resourceId`를 `user-1`로 넣고 `npm run threads`를 돌렸다.
+
+```
+[스레드] 2개
+
+- id=todo-1 title=(없음)
+    user: 내 이름은 홍길동이야. 내일 오전 회의 준비를 할 일에 추가해 줘
+    assistant: 홍길동님, '내일 오전 회의 준비'를 할 일 목록에 추가했습니다!
+    user: 내 이름이 뭐야?
+    assistant: 홍길동님입니다!
+    user: 할 일 목록 보여 줘
+    assistant: 현재 저장된 할 일이 없습니다. 새로운 할 일을 추가하고 싶으시다면 언제든 말씀해 주세요!
+
+- id=todo-2 title=(없음)
+    user: 내 이름이 뭐야?
+    assistant: 죄송하지만, 아직 이름이 무엇인지 알려주시지 않아서 알지 못합니다. 이름을 알려주시면 기억해 둘게요!
+```
+
+스크립트에서 `parts` 중 텍스트만 골라 내므로 도구 호출 part는 출력에서 빠진다. 1-1에서 확인한 저장 구조 때문이고, 그대로 찍으면 JSON 덩어리가 나온다.
+
+#### clap-agent
+
+기본 REST 경로를 쓰지 않고 커스텀 라우트를 목록·단건·메시지·삭제로 나눠 만들었다.
+
+- metadata로 DB 필터를 건다. 리뷰 그룹별로 대화방을 나눠 보여 주려고 `listThreads`의 `filter.metadata`에 리뷰 그룹 번호를 넘긴다. (`server/review/review-thread-list.ts:35-47`) 가져온 뒤 코드로 거르지 않는 이유는 `total`과 `hasMore`가 필터 기준으로 정확해야 하기 때문이다. 나중에 걸러 내면 총 개수가 부풀어 다음 쪽이 있다고 잘못 말한다.
+- 필터를 붙일지 판단할 때 참·거짓이 아니라 `undefined`인지를 본다. 빈 문자열을 거짓으로 처리하면 필터가 통째로 빠져 모든 방이 나가기 때문이다. (`review-thread-list.ts:41`)
+- 같은 조건을 두 번 검사한다. DB 필터로 한 번 거르고, 가져온 스레드의 id 접두사로 다시 거른다. metadata가 오염돼도 id 접두사가 정본이라는 판단이다. (`review-thread-list.ts:57-59`)
+- 메시지는 `user`와 `assistant`만 내보낸다. working memory 알림 같은 `system`, `signal` 턴은 사용자에게 보여 줄 것이 아니다. (`review-thread-messages.ts:62-65`)
+- 객체를 통째로 펼치지 않고 필요한 필드만 골라 담는다. 그대로 펼치면 `content.metadata`, `toolInvocations`, `resourceId` 같은 것이 응답으로 새어 나간다. `content`와 `parts`는 선택적으로 읽어 깨진 행 하나로 방 전체가 500이 되지 않게 막는다. (`review-thread-messages.ts:66-70`)
+- 정렬을 명시한다. 적지 않고 암묵적인 내림차순에 기대면 "0쪽이 최신"이라는 계약이 구현에 매달리고, 라이브러리가 바뀌면 조용히 뒤집힌다. (`review-thread-messages.ts:51-60`)
+- `@mastra/pg` 1.17.0에서 직접 재 보고 쓴 주석이 있다. 어댑터가 metadata 필터를 무시하면 노출은 막히지만 총 개수가 어긋나고, 그것은 목 객체로 잡히지 않으니 버전을 올릴 때 실제 DB로 다시 확인하라고 적어 두었다.
+
+실습 스크립트는 `message.content.parts`를 그냥 읽는다. 행이 하나라도 예상과 다르면 그 자리에서 터진다. 실습에서는 괜찮지만 운영에서는 위 방어가 필요하다.
+
+#### 헷갈렸던 지점
+
+- `getThreadById`와 `recall`의 차이 → 앞은 대화방 객체 하나, 뒤는 그 방 안의 메시지 배열이다. 스레드 객체에 메시지는 들어 있지 않다.
+- `perPage`는 어떻게 페이징되나, 무한 스크롤인가 → `LIMIT`과 `OFFSET`을 쓰는 오프셋 방식이다. `hasMore`를 보고 `page`를 올려 가며 무한 스크롤로 쓸 수는 있지만 목록이 바뀌면 항목이 밀린다.
+- 이걸 프런트엔드에서 직접 부르나 → 아니다. 서버에서 돈다. 프런트엔드는 서버가 열어 둔 HTTP 경로를 부른다.
+
 ## 3. Observational Memory
 
 원문: https://mastra.ai/docs/memory/observational-memory

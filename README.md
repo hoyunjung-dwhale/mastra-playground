@@ -32,6 +32,7 @@ npm run dev        # 개발 서버 + Studio (http://localhost:4111)
 npm run call       # 스크립트로 에이전트 호출 (scripts/call-todo-agent.ts)
 npm run structured # structured output 호출 (scripts/structured-output.ts)
 npm run call:memory # resource·thread를 넘겨 기억을 확인 (scripts/call-todo-agent-memory.ts)
+npm run threads    # 저장된 스레드·메시지 조회 (scripts/list-todo-threads.ts)
 npm run check      # biome (서식·린트). 자동 수정은 npm run check:fix
 npm run typecheck  # tsc
 ```
@@ -59,6 +60,7 @@ scripts/
   call-todo-agent.ts    generate·stream 호출 예제
   structured-output.ts  structured output 호출 예제
   call-todo-agent-memory.ts  resource·thread를 넘겨 기억 확인
+  list-todo-threads.ts  저장된 스레드·메시지 조회
 docs/
   agents.md             Agents 절 정리 (저장소 작성자)
   memory.md             Memory 절 정리 (저장소 작성자)

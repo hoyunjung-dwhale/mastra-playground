@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "call": "tsx --env-file=.env scripts/call-todo-agent.ts",
     "structured": "tsx --env-file=.env scripts/structured-output.ts",
-    "call:memory": "tsx --env-file=.env scripts/call-todo-agent-memory.ts"
+    "call:memory": "tsx --env-file=.env scripts/call-todo-agent-memory.ts",
+    "threads": "tsx --env-file=.env scripts/list-todo-threads.ts"
   },
   "dependencies": {
     "@mastra/core": "1.65.0",
