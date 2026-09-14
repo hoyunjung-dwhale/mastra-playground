@@ -4,7 +4,6 @@ import { MODELS } from '../models';
 // storage는 Mastra 인스턴스에 등록한 것을 물려받는다. (src/mastra/index.ts)
 export const todoAgentMemory = new Memory({
   options: {
-    lastMessages: 10,
     // 응답이 나간 뒤 비동기로 도는 별도 LLM 호출이다. 스레드마다 한 번만 돌고,
     // 에이전트 instructions는 실리지 않는다.
     generateTitle: {

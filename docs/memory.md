@@ -490,6 +490,124 @@ Spring으로 치면 `@PreAuthorize`에 해당하는 장치가 라이브러리에
 
 OM이 캐싱에 유리하다는 설명은 clap-agent 입장에서 솔깃한 이야기다. 그쪽은 캐시 프리픽스를 지키려고 프롬프트를 두 덩어리로 나누고 앞 덩어리를 변수에 담아 재사용하는 수고까지 한다. 다만 OM을 켜면 반추가 돌 때마다 관찰 기록이 통째로 새로 쓰이므로 그 시점에 프리픽스가 한 번 깨진다. 문서가 말하는 "덧붙는 방식이라 캐시가 유지된다"는 것은 관찰이 쌓이는 동안의 이야기이고 반추는 예외다. 대화가 짧으면 반추까지 가지 않아 이득만 보고, 길면 반추가 반복된다. 세션 길이가 판단 기준이 된다.
 
+### 3-2. 모델, 스코프, 토큰 예산
+
+#### 개념
+
+운영에서 OM을 켤 때 먼저 정해야 하는 세 가지다.
+
+모델은 세 자리에 따로 줄 수 있다.
+
+| 설정 | 적용 대상 |
+|---|---|
+| `model` | Observer와 Reflector 둘 다 |
+| `observation.model` | Observer만 |
+| `reflection.model` | Reflector만 |
+
+`model`과 나머지 둘을 함께 쓰면 오류가 난다. 셋 다 생략하면 `google/gemini-2.5-flash`로 떨어진다. 문서는 컨텍스트 창이 12만 8천 토큰 이상이고 배경에서 돌아도 느려지지 않을 만큼 빠른 모델을 권한다.
+
+문서에 경고가 하나 붙어 있다. 기본 모델은 긴 출력에서 세부를 유난히 잘 보존해서, Reflector가 압축을 반복해도 기준선 아래로 못 내려가는 일이 생긴다. 이때는 무한 반복 대신 가장 작은 후보를 돌려주고 끝낸다. 더 과감한 압축을 원하면 Reflector만 다른 모델로 바꾸라고 권한다. 모델을 자리별로 나눌 수 있는 것이 여기서 실제 쓰임새를 갖는다.
+
+스코프는 둘이다.
+
+| 값 | 관찰 기록이 사는 범위 | 상태 |
+|---|---|---|
+| `thread` (기본) | 대화 하나 | 안정 |
+| `resource` | 그 사용자의 모든 대화 | 실험 기능 |
+
+기본 스코프가 `thread`인 것이 다른 층과 다르다. Working memory와 semantic recall은 기본이 `resource`다. 관찰 기록은 지금 하는 일의 맥락을 압축한 것이라 다른 대화로 새면 오히려 방해가 되기 때문으로 보인다. (추정)
+
+토큰 예산은 기본적으로 따로 잡힌다. 메시지 기록 3만, 관찰 기록 4만이다. `shareTokenBudget`을 켜면 둘을 합쳐 7만으로 두고 서로 빌려 쓴다. 다만 배경 버퍼링과 아직 호환되지 않아 `bufferTokens: false`를 함께 넣어야 한다는 제약이 있다.
+
+#### 실습 결과
+
+코드가 늘지 않았다. 두 가지를 정했고 둘 다 기본값을 유지하는 쪽이라, 기본값과 같은 값은 적지 않는다는 프로젝트 기준을 따랐다. 정한 이유를 여기 남기는 것이 결과물이다.
+
+- **스코프는 `thread`로 둔다.** 할 일 에이전트의 관찰 기록은 "회의 준비 항목을 추가했고 목록을 확인했다" 같은 내용이다. 그 대화 안에서만 쓸모가 있고 다른 대화로 새면 방해가 된다. `resource`가 실험 기능이라는 점도 미루는 이유다.
+- **모델은 하나로 둔다.** Observer와 Reflector를 갈라 서로 다른 모델을 주는 것은 호출량 차이가 클 때 의미가 있다. Observer가 훨씬 자주 돌기 때문이다. 지금은 관찰 자체가 거의 돌지 않는 규모라 나눌 근거가 없다.
+
+기본값을 유지한 자리마다 코드에 주석을 달지는 않는다. 그러면 파일이 안 한 일의 목록이 된다. 판단의 근거는 정리 파일이 가져간다.
+
+### 3-3. 다른 기억 층과의 비교
+
+#### 개념
+
+문서의 결론 문장은 이렇다. "실질적으로 OM은 working memory와 message history를 모두 대체하며, semantic recall보다 정확도가 높고 비용이 낮다."
+
+| 층 | 맡는 것 |
+|---|---|
+| Message history | 지금 대화의 원문 기록 |
+| Working memory | 선호, 이름, 목표 같은 작고 구조화된 상태 |
+| Semantic recall | 관련 있는 과거 메시지를 검색해 오기 |
+| Observational Memory | 오래 이어지는 사건 기록 |
+
+대화 요약이나 시간이 지나며 자라는 상태를 working memory에 담고 있다면 OM이 더 맞다. Working memory는 작고 구조화된 데이터를 위한 것이고 OM은 길게 이어지는 사건 기록을 위한 것이다.
+
+"semantic recall보다 정확도가 높고 비용이 낮다"는 주장의 근거는 구조에 있다. Semantic recall은 매 턴 임베딩을 만들고 벡터를 조회한다. 턴마다 비용이 붙고, 찾아온 결과가 턴마다 달라 프롬프트 캐시가 계속 깨지며, 유사도로 고르는 방식이라 정말 필요한 메시지를 놓칠 수 있다. OM은 관찰할 때만 LLM을 부르고 그 결과가 계속 컨텍스트에 남는다. 검색이 아니라 상주다. 대신 원문 표현이 사라진다.
+
+#### OM만 켜도 되나
+
+한 대화 안에서는 된다. 대화를 넘어가면 안 된다.
+
+**message history는 실제로 대체된다.** OM이 켜져 있으면 `MessageHistory` 프로세서를 아예 만들지 않는다. (`agent-D-8HgWUU.js:17174`, `:17274`)
+
+```js
+if (!hasMessageHistory && !hasObservationalMemory) processors.push(new MessageHistory({...}))
+```
+
+그래서 OM을 켜면 `lastMessages` 값이 무시된다. 원문을 얼마나 남길지는 `observation.messageTokens`가 정한다. 두 옵션을 나란히 두면 앞엣것이 조용히 죽으므로 `lastMessages`는 지웠다.
+
+**대화를 넘어가는 기억은 얻지 못한다.** 기본 스코프가 층마다 다르기 때문이다.
+
+| 층 | 기본 스코프 |
+|---|---|
+| Observational Memory | `thread` |
+| Working memory | `resource` |
+| Semantic recall | `resource` |
+
+OM만 켜고 기본값을 쓰면 관찰 기록이 그 대화 안에만 산다. 새 대화를 시작하면 사용자 이름도 선호도 모른다. 문서가 "OM이 working memory를 대체한다"고 말할 때의 전제는 스코프를 맞췄을 때다. 그 문장만 보고 기본값으로 켜면 대화를 넘는 기억이 조용히 사라진다. `observation.manageWorkingMemory` 옵션이 있는 것도 이 때문으로 보인다. Observer가 관찰하면서 working memory를 함께 갱신하게 하는 방식이라 둘을 대립시키지 않고 붙여 쓰는 길을 열어 둔 것이다.
+
+#### 저장과 컨텍스트는 다른 층이다
+
+OM은 메시지를 지우지 않는다. OM이 부르는 함수는 `filterObservedMessages`이고 하는 일은 `messageList.removeByIds(...)`다. (`src-BFP4tRqs.js:23652-23676`) `messageList`는 이번 요청에서 모델에게 보낼 목록이지 DB 테이블이 아니다. OM 코드 어디에도 `deleteMessages` 호출이 없다.
+
+```mermaid
+flowchart TB
+    A["대화가 오갈 때<br/>mastra_messages 에 저장 (항상)"] --> B["다음 호출 때<br/>테이블에서 읽어 컨텍스트 조립"]
+    B --> C{"OM 켜짐?"}
+    C -- 아니요 --> D["lastMessages 개수만큼 자른다"]
+    C -- 예 --> E["관찰된 메시지를 목록에서 빼고<br/>관찰 기록을 system 자리에 넣는다"]
+    D --> F["모델"]
+    E --> F
+    A --> G["배경: 관찰 안 된 메시지가 기준을 넘으면<br/>Observer 요약 → mastra_observational_memory"]
+    G -.observedMessageIds.-> E
+```
+
+두 테이블을 잇는 것은 `observedMessageIds` 하나다. OM은 원문을 복사해 가지 않고 어디까지 봤는지만 기록한다. 그래서 관찰 기록이 원문을 대체하는 것은 컨텍스트를 조립하는 순간뿐이고, 조립이 끝나면 그 목록은 버려진다.
+
+이 구조라서 OM을 나중에 꺼도 아무것도 잃지 않는다. 원문이 전부 남아 있으므로 `lastMessages` 방식으로 돌아가면 그대로 동작한다.
+
+화면에 보여 주는 경로는 따로다. `recall`과 `GET /memory/threads/:id/messages`는 테이블을 그대로 읽으므로 OM을 켜든 말든 모든 메시지가 나온다. "기억을 얼마나 남길까"는 사실 두 개의 질문이다. 화면에 얼마나 보여 줄까는 페이징 문제이고, 모델에게 얼마나 보낼까는 컨텍스트 비용 문제다.
+
+#### Memory가 쓰는 테이블
+
+| 테이블 | 담는 것 | 주요 컬럼 |
+|---|---|---|
+| `mastra_threads` | 대화방 | `id`, `resourceId`, `title`, `metadata` |
+| `mastra_messages` | 메시지 원문 | `id`, `thread_id`, `content`, `role`, `createdAt`, `resourceId` |
+| `mastra_observational_memory` | 관찰 기록 | `lookupKey`, `scope`, `activeObservations`, `observedMessageIds` |
+
+`mastra_messages`의 `content` 칸에 `parts` 구조 JSON이 통째로 들어간다. 인덱스 두 개가 모두 `thread_id`와 `createdAt`을 묶고 있고, 그중 하나에 `resourceId`가 끼어 있다. "이 스레드의 메시지를 시간순으로"가 가장 잦은 질의이고, `recall`에 `resourceId`를 함께 넘기는 경로를 뒷받침하기 위해서다.
+
+OM 테이블에서 눈여겨볼 것은 `activeObservations`가 하나의 칸이라는 점이다. 관찰이 행마다 쌓이는 구조가 아니라 한 덩어리를 계속 다시 쓰는 구조이고, 반추가 쌓이지 않는다는 설명과 맞물린다. `isObserving`과 `isReflecting`은 배경 작업이 겹쳐 도는 것을 막는 잠금으로 보인다. (추정)
+
+#### 헷갈렸던 지점
+
+- OM만 켜도 되나 → 한 대화 안에서는 된다. 기본 스코프가 `thread`라 대화를 넘는 기억은 얻지 못한다.
+- OM도 DB에 저장하나 → 한다. `mastra_observational_memory` 테이블이 전용으로 있다.
+- 화면에 전체 대화를 보여 주려면 원문이 필요한데 OM이 지우는 것 아닌가 → 지우지 않는다. OM이 빼는 것은 이번 요청의 메시지 목록이고 테이블은 그대로다.
+- 메시지 테이블도 Memory가 관리하는 것인가 → 그렇다. `mastra_messages`가 Memory가 쓰는 테이블이다. "메모리"가 RAM을 뜻하는 말과 겹쳐 헷갈리기 쉽다.
+
 ## 4. Working Memory
 
 원문: https://mastra.ai/docs/memory/working-memory
