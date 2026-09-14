@@ -77,7 +77,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 | 회차 | 문서 절 | 정리 파일 | 상태 |
 |---|---|---|---|
 | 1 | Build / Agents | `docs/agents.md` | 끝 |
-| 2 | Build / Memory | `docs/memory.md` | 진행 중 |
+| 2 | Build / Memory | `docs/memory.md` | 끝 |
 | 3 | Develop, Deploy / Storage, Server | `docs/develop-deploy.md` | 예정 |
 | 4 | Observe / Trace, Metrics, Evals | `docs/observe.md` | 예정 |
 

@@ -1,6 +1,118 @@
 # Memory
 
-진행 계획만 적어 둔 틀이다. 내용은 소제목을 하나씩 볼 때마다 아래에 채운다.
+## 전체 흐름
+
+메모리를 켠다는 것은 한 문장으로 줄이면 이렇다. 대화를 DB 에 저장해 두었다가, 사용자가 다음 메시지를 보냈을 때 지난 대화 중 무엇을 함께 실어 보낼지 고르는 일이다.
+
+저장은 어떤 층을 켜도 같다. 층이 다른 것은 다시 보내는 방식이다.
+
+### 왜 고르는 문제인가
+
+전부 다 보내면 될 것 같지만 세 가지가 막는다.
+
+| 제약 | 결과 |
+|---|---|
+| 컨텍스트 창 한도 | 대화가 길어지면 물리적으로 다 넣지 못한다 |
+| 토큰 비용 | 매 호출에 실린 만큼 낸다 |
+| 성능 저하 | 창이 꽉 차면 모델이 오히려 못한다 (context rot) |
+
+그래서 각 층은 "무엇을 버리고 무엇을 남길까"에 대한 서로 다른 답이다. Message history 는 최근 것만 남기고 오래된 것을 버린다. Observational Memory 는 버리지 않고 요약해서 남긴다. Semantic recall 은 관련 있는 것만 골라 온다. Working memory 는 짧게 요약된 상태를 항상 남긴다.
+
+기본값은 전부 보내는 것이 아니다. `Memory` 를 옵션 없이 만들면 최근 10개만 간다. (`agent-D-8HgWUU.js:16829-16834`) 전부 보내려면 `lastMessages: Number.MAX_SAFE_INTEGER` 처럼 명시해야 한다.
+
+### 사용자 입력 하나가 흐르는 길
+
+```
+사용자: "내일 회의 준비 추가해 줘"
+   │
+   ▼
+agent.generate(msg, { memory: { resource, thread } })
+   │
+   ▼
+[1] 스레드 확인. 없으면 만든다
+   │
+   ▼
+[2] 입력 프로세서 체인          ← 여기서 컨텍스트가 조립된다
+   │
+   │   (1) WorkingMemory     현재 사용자 상태를 system 에 넣는다
+   │   (2) MessageHistory    최근 N개를 대화 앞에 붙인다
+   │                         OM 이 켜져 있으면 이 프로세서가 없다
+   │   (3) SemanticRecall    유사 검색으로 찾은 과거를 붙인다
+   │   (4) Observational     관찰된 메시지를 빼고 관찰 기록을 system 에
+   │   ────────────────────  여기까지가 Mastra 가 붙인 것
+   │   (5) unicodeNormalizer 우리가 붙인 것
+   │   (6) inputModeration
+   │
+   ▼
+[3] 모델 호출
+   │   도구를 부르면 실행하고 결과를 넣어 다시 호출 (에이전트 루프)
+   │
+   ▼
+[4] 출력 프로세서 체인
+   │
+   │   (1) outputFilter      우리 것이 먼저 돈다
+   │   ────────────────────  abort() 하면 아래가 실행되지 않는다
+   │   (2) WorkingMemory     갱신된 상태를 저장
+   │   (3) MessageHistory    새 메시지를 저장
+   │   (4) SemanticRecall    새 메시지를 임베딩해 저장
+   │   (5) Observational     메시지 저장과 관찰 마무리
+   │
+   ▼
+사용자에게 응답
+   │
+   └─ [비동기] 제목 생성 (스레드에 제목이 없을 때 한 번)
+              관찰 버퍼링 (토큰 간격에 닿았을 때)
+```
+
+입력 순서는 `getInputProcessors` 가 `WorkingMemory`, `MessageHistory`, `SemanticRecall` 순으로 넣고(`agent-D-8HgWUU.js:17143-17210`) memory 패키지가 그 뒤에 OM 을 덧붙인다(`src-BFP4tRqs.js:31902-31911`). 출력도 같은 방식으로 조립되며, 우리 프로세서가 앞에 오는 것만 뒤집힌다.
+
+### 프로세서가 붙는 규칙
+
+| 켠 옵션 | 붙는 프로세서 | 안 붙는 조건 |
+|---|---|---|
+| `workingMemory.enabled` | `WorkingMemory` | 같은 id 를 직접 넣었을 때 |
+| `lastMessages` | `MessageHistory` | 같은 id 를 넣었거나 OM 이 켜져 있을 때 |
+| `semanticRecall` | `SemanticRecall` | 같은 id 를 직접 넣었을 때 |
+| `observationalMemory` | `ObservationalMemory` | 같은 id 를 직접 넣었을 때 |
+
+합치는 순서는 `[Mastra 것, 우리 것]` 이다. 그래서 하나를 직접 넣으면 그것이 나머지 자동 추가분보다 뒤로 간다.
+
+### 층이 답하는 질문
+
+| 답해야 할 질문 | 맡는 층 | 스코프 기본값 |
+|---|---|---|
+| 아까 뭐라고 했지 | Message history | 대화 |
+| 이 대화에서 지금까지 뭘 했지 | Observational Memory | 대화 |
+| 예전 대화에서 비슷한 얘기 없었나 | Semantic recall | 사용자 |
+| 나를 뭐라고 부르지 | Working memory | 사용자 |
+
+스코프가 설계 수단이다. 대화 단위 층과 사용자 단위 층을 섞으면 "이 대화의 맥락"과 "이 사람에 대한 앎"을 따로 관리할 수 있다.
+
+### 언제 무엇을 켜나
+
+| 상황 | 켤 것 |
+|---|---|
+| 한 번 묻고 끝나는 요청 | 아무것도. `memory` 자체가 필요 없다 |
+| 짧은 대화 몇 턴 | `lastMessages` 만. 기본 10이면 대개 충분하다 |
+| 대화가 길어지는 서비스 | Observational Memory. `lastMessages` 는 자동으로 무력화된다 |
+| 사용자를 대화 너머로 기억해야 함 | Working memory. 스코프가 사용자 단위다 |
+| 예전 대화에서 찾아와야 함 | Semantic recall. 벡터 저장소와 임베딩 모델이 더 필요하다 |
+| 채팅 UI 에 대화 목록이 있음 | `generateTitle`. 지침을 직접 쓴다 |
+
+겹치는 것은 피한다. 문서가 OM 과 working memory 를 함께 돌리지 말라고 명시한다. 다만 스코프가 다르면 실제로 겹치지 않는다. OM 은 대화 단위이고 working memory 는 사용자 단위다.
+
+### 이 저장소의 최종 구성
+
+| 층 | 설정 | 판단 |
+|---|---|---|
+| Message history | 없음 | OM 이 켜져 있어 프로세서가 만들어지지 않는다 |
+| 제목 생성 | `flash-lite` 와 직접 쓴 지침 | 기본 지침은 언어 규칙이 없어 제목이 영어로 나온다 |
+| Working memory | 항목 셋짜리 템플릿, 사용자 단위 | 대화를 넘는 기억이 필요해 남긴다 |
+| Semantic recall | `true` (기본값) | 실습용. 운영이라면 OM 과 겹쳐 뺄 후보다 |
+| Observational Memory | 모델만 명시, 대화 단위 | 기본 모델이 막혀 있어 명시가 필수다 |
+| `TokenLimiter` | 넣지 않음 | system 자리를 자르지 못해 OM 구성에서는 쓸 구간이 없다 |
+
+학습용이라 넷을 다 켜 두었다. 운영이라면 semantic recall 을 빼고 OM 과 working memory 조합으로 가는 것이 문서 권고에 가깝다.
 
 ## 1. Overview
 
