@@ -3,18 +3,19 @@ import { mastra } from '../src/mastra/index';
 
 const agent = mastra.getAgentById(TODO_AGENT_ID);
 
-// TODO: resource는 사용자 식별자, thread는 대화 식별자다. 두 번째 호출이 첫 메시지를 기억하려면
-// 같은 값을 넘겨야 한다. 값을 정해 넣는다. (예: resource 'user-1', thread 'todo-1')
-const memory = { resource: '', thread: '' };
+const memory = { resource: 'user-1', thread: 'todo-1' };
 
-// TODO: 첫 호출에서 기억할 만한 것(이름, 선호)을 말하면서 할 일을 추가한다.
-const first = await agent.generate('', { memory });
+const first = await agent.generate(
+  '내 이름은 홍길동이야. 내일 오전 회의 준비를 할 일에 추가해 줘',
+  { memory },
+);
 console.log('[1st] text:', first.text);
 
-// TODO: 두 번째 호출에서 첫 메시지에서 말한 것을 물어 본다.
-const second = await agent.generate('', { memory });
+const second = await agent.generate('내 이름이 뭐야?', { memory });
 console.log('[2nd] text:', second.text);
 
-// TODO: 같은 resource, 다른 thread로 같은 질문을 해서 첫 대화를 모르는지 확인한다.
-const other = await agent.generate('', { memory: { resource: memory.resource, thread: '' } });
+// 사용자는 같고 대화만 다르다. 앞 호출과 질문이 같아야 대화 경계가 드러난다.
+const other = await agent.generate('내 이름이 뭐야?', {
+  memory: { resource: memory.resource, thread: 'todo-2' },
+});
 console.log('[other thread] text:', other.text);
