@@ -103,89 +103,9 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 3. 다음 **완성** 커밋의 코드와 비교한다. (`git diff <완성 커밋> -- src`)
 4. 자기 정리는 `notes/`에 쓴다. `docs/`는 저장소 작성자의 정리이므로 고치지 않는다. 그래야 이후 회차를 `git pull`로 받을 때 충돌이 나지 않는다.
 
-절이 끝난 시점에는 태그가 있다. `git tag`로 목록을 본다.
+절이 끝난 시점에는 `<절>/<번호>-<페이지>` 형식의 태그가 있다. `git tag`로 목록을 본다.
 
-| 태그 | 시점 |
-|---|---|
-| `agents/1-overview` | Agents 절 Overview 페이지 끝 |
-| `agents/2-tools` | Agents 절 Tools 페이지 끝 |
-| `agents/3-structured-output` | Agents 절 Structured Output 페이지 끝 |
-| `agents/4-processors` | Agents 절 Processors 페이지 끝 |
-| `agents/5-guardrails` | Agents 절 Guardrails 페이지 끝 |
-| `agents/6-human-in-the-loop` | Agents 절 Human-in-the-Loop 페이지 끝 |
-| `agents/7-code-mode` | Agents 절 끝 |
-
-## 공식 문서에서 다룬 것과 건너뛴 것
-
-### Agents / Overview
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| 에이전트 정의, When to use agents | 다룸 (1-1) | 에이전트 루프와 workflow와의 구분 |
-| Quickstart | 다룸 (1-2) | `Agent` 생성자와 등록 |
-| Use your agent | 다룸 (1-3) | `generate`, `stream` |
-| Expand your agent | 건너뜀 | 다른 페이지 링크 표 |
-| Multi-agent systems | 건너뜀 | 별도 가이드 문서 |
-
-### Agents / Tools
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| Quickstart, Multiple tools, Control toolName | 다룸 (2-1) | 도구 정의·연결의 핵심. 도구 이름은 id가 아니라 객체 키 |
-| Define schemas | 다룸 (2-2) | description·describe 작성 지침, `outputSchema` union |
-| Shape output for the model, Transform tool payloads | 다룸 (2-3, 개념만) | 도구 결과가 컨텍스트를 차지하는 문제 |
-| When to use tools | 건너뜀 | 자명함 |
-| Valibot, ArkType | 건너뜀 | zod만 씀 |
-| Agents as tools, Workflows as tools | 건너뜀 | 별도 문서(Supervisor agents) 범위 |
-| Share tools, Streaming, Control tool selection, Built-in tools | 건너뜀 | 필요할 때 레퍼런스로 충분 |
-| Run logic around tool calls (hooks) | 건너뜀 | 차단·검사는 Guardrails에서 |
-
-### Agents / Structured Output
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| Define schemas (zod), When to use | 다룸 (3-1) | `structuredOutput` 옵션과 `response.object` |
-| Combine tools and structured output, `jsonPromptInjection`, separate structuring model | 다룸 (3-2) | 도구와 함께 쓸 때의 모델 제약 |
-| Handle errors | 다룸 (3-3) | `errorStrategy` |
-| Valibot, ArkType, JSON Schema | 건너뜀 | zod만 씀 |
-| Stream structured output, `useAgent`, `prepareStep` | 건너뜀 | 필요할 때 레퍼런스로 충분 |
-
-### Agents / Processors
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| 개념, Execution order, Attach processors | 다룸 (4-1) | 훅 시점과 순서, Memory 프로세서와의 관계 |
-| Create custom processors (processInput, processOutputStream, processOutputResult, abort) | 다룸 (4-1, 4-2) | 실무 프로세서는 대부분 커스텀 |
-| Built-in utility processors (TokenLimiter, ToolCallFilter) | 다룸 (4-3, 개념만) | Memory가 있을 때 의미. 실습은 Memory 회차로 |
-| processInputStep, processLLMRequest/Response, prepareStep | 건너뜀 | 단계별 모델 교체 같은 고급 용도 |
-| Response caching | 건너뜀 | beta |
-| Advanced patterns, API error handling, ProviderHistoryCompat, ToolSearchProcessor | 건너뜀 | 필요할 때 레퍼런스로 |
-| Violation callbacks | Guardrails에서 | 가드레일과 한 묶음 |
-
-### Agents / Guardrails
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| 내장 프로세서 목록, Processor strategies, Violation callbacks, Handle blocked requests | 다룸 (5-1) | 무엇이 있고 어떻게 고르는지 |
-| Speed up guardrails | 다룸 (5-2, 개념만) | clap-agent가 사후 비동기로 돌린 배경 |
-| 각 프로세서 상세 옵션 | 건너뜀 | 레퍼런스 |
-
-### Agents / Human-in-the-Loop
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| How approval works (requireApproval, suspend), generate와의 비교, Automatic tool resumption | 다룸 (6-1, 개념만) | 실습은 스냅샷 storage가 필요해 Storage 회차 뒤로 |
-| Supervisor agents | 건너뜀 | 범위 밖 |
-| Resuming after a restart | 건너뜀 | storage 뒤에 |
-
-### Agents / Code Mode
-
-| 소제목 | 처리 | 이유 |
-|---|---|---|
-| When to use, How it works, Quickstart, 샌드박스 종류 | 다룸 (7-1, 개념만) | 모델이 쓴 코드를 실행하는 도구. clap-agent가 LocalSandbox를 직접 강화해 사용 |
-| Scoping tools across multiple code tools, Remote sandboxes 상세 | 건너뜀 | 필요할 때 레퍼런스로 |
-
-8회차부터는 회차별 계획을 각 정리 파일(`docs/memory.md`, `docs/develop-deploy.md`, `docs/observe.md`) 맨 위에 둔다.
+회차마다 무엇을 다루고 무엇을 건너뛰는지는 그 회차의 정리 파일 맨 위에 적어 둔다.
 
 ## Claude Code와 함께 공부하기
 
