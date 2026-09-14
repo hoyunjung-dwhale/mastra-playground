@@ -595,7 +595,7 @@ flowchart TB
 **모델 흐름, OM이 켜진 경우** — 호출 하나 안에서 동기 경로와 비동기 경로가 갈라진다. 별도 스케줄러가 도는 것이 아니라, 같은 요청 안에서 응답 경로를 막지 않고 도는 작업이다.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph SYNC["동기 — 사용자가 기다리는 경로"]
         direction TB
         A1["에이전트 호출"] --> A2["저장된 메시지를 목록에 채운다"]
