@@ -25,12 +25,13 @@ npm install
 cp .env.example .env
 ```
 
-`.env`에 발급받은 키를 넣는다. 쓰지 않는 항목은 비워 둔다.
+`.env`에 발급받은 키를 넣는다. 쓰지 않는 항목은 비워 둔다. `DATABASE_URL`은 비워 두면 프로젝트 루트의 `mastra.db` 파일(libSQL)을 쓴다.
 
 ```bash
 npm run dev        # 개발 서버 + Studio (http://localhost:4111)
 npm run call       # 스크립트로 에이전트 호출 (scripts/call-todo-agent.ts)
 npm run structured # structured output 호출 (scripts/structured-output.ts)
+npm run call:memory # resource·thread를 넘겨 기억을 확인 (scripts/call-todo-agent-memory.ts)
 npm run check      # biome (서식·린트). 자동 수정은 npm run check:fix
 npm run typecheck  # tsc
 ```
@@ -46,17 +47,21 @@ src/mastra/
   index.ts              Mastra 인스턴스. 에이전트를 여기에 등록한다
   constants.ts          에이전트 id·등록 키
   models.ts             모델 문자열 상수 (타입으로 오타 방지)
+  storage.ts            대화를 저장할 libSQL 어댑터. Studio와 스크립트가 같은 파일을 보도록 절대 경로
   agents/
     todo-agent.ts       할 일 관리 에이전트
     todo-agent.prompt.ts  system prompt
+    todo-agent.memory.ts  Memory 설정 (어떤 기억 층을 어떤 옵션으로 켤지)
   tools/                도구. 파일 하나에 하나씩, id는 kebab-case
   todo/                 할 일 스키마(zod)와 메모리 저장소
   processors/           입력 가드레일(내장), 출력 스트림 필터(커스텀)
 scripts/
   call-todo-agent.ts    generate·stream 호출 예제
   structured-output.ts  structured output 호출 예제
+  call-todo-agent-memory.ts  resource·thread를 넘겨 기억 확인
 docs/
   agents.md             Agents 절 정리 (저장소 작성자)
+  memory.md             Memory 절 정리 (저장소 작성자)
 notes/                  클론한 학습자가 자기 정리를 쓰는 곳
 CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 ```
