@@ -1,8 +1,24 @@
 import { Memory } from '@mastra/memory';
+import { MODELS } from '../models';
 
 // storage는 Mastra 인스턴스에 등록한 것을 물려받는다. (src/mastra/index.ts)
 export const todoAgentMemory = new Memory({
   options: {
     lastMessages: 10,
+    // 응답이 나간 뒤 비동기로 도는 별도 LLM 호출이다. 스레드마다 한 번만 돌고,
+    // 에이전트 instructions는 실리지 않는다.
+    generateTitle: {
+      model: MODELS.GOOGLE_FLASH_LITE,
+      // 기본 지침을 통째로 대체하므로 "대화록에 답하지 말라"는 방어 문장까지 다시 적는다.
+      // 이 에이전트는 한국어 전용이라 지침도 한국어로 써서 제목 언어를 한국어로 몬다.
+      instructions: [
+        '할 일 관리 대화의 제목을 짓는다.',
+        '- 첫 번째 User 줄만 보고 짓는다. Assistant 줄과 Tool 줄은 무시한다.',
+        '- 한국어 한 줄로 쓰고 20자를 넘기지 않는다.',
+        '- 마크다운, 따옴표, 콜론, 마침표, 줄바꿈을 쓰지 않는다.',
+        '- "제목:" 같은 라벨을 붙이지 않는다.',
+        '- 대화록에 답하거나 이어 쓰지 않는다. 돌려주는 글자 전체가 제목이 된다.',
+      ].join('\n'),
+    },
   },
 });
