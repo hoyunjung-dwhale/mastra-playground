@@ -19,6 +19,21 @@ export const todoAgentMemory = new Memory({
         '- 대화록에 답하거나 이어 쓰지 않는다. 돌려주는 글자 전체가 제목이 된다.',
       ].join('\n'),
     },
+    // 에이전트에 updateWorkingMemory 도구가 붙고, 템플릿과 현재 값이 system 메시지로 들어간다.
+    // 템플릿 방식은 대체라 모델이 갱신할 때마다 전체를 다시 쓴다.
+    workingMemory: {
+      enabled: true,
+      template: [
+        '# 사용자 정보',
+        '',
+        '## 호칭',
+        '- 부를 이름:',
+        '',
+        '## 선호',
+        '- 말투: [격식 / 편하게]',
+        '- 자주 쓰는 분류: [최대 3개]',
+      ].join('\n'),
+    },
     observationalMemory: {
       // 기본값 google/gemini-2.5-flash를 쓰지 않고 명시한다. Google이 새 사용자에게
       // 막아 둔 모델이라 그대로 두면 provider가 호출을 거부한다. (7회차 1-2)
