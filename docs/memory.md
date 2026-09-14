@@ -571,17 +571,32 @@ OM만 켜고 기본값을 쓰면 관찰 기록이 그 대화 안에만 산다. �
 
 OM은 메시지를 지우지 않는다. OM이 부르는 함수는 `filterObservedMessages`이고 하는 일은 `messageList.removeByIds(...)`다. (`src-BFP4tRqs.js:23652-23676`) `messageList`는 이번 요청에서 모델에게 보낼 목록이지 DB 테이블이 아니다. OM 코드 어디에도 `deleteMessages` 호출이 없다.
 
+OM이 꺼져 있을 때는 저장과 조립 두 단계뿐이다.
+
 ```mermaid
 flowchart TB
-    A["대화가 오갈 때<br/>mastra_messages 에 저장 (항상)"] --> B["다음 호출 때<br/>테이블에서 읽어 컨텍스트 조립"]
-    B --> C{"OM 켜짐?"}
-    C -- 아니요 --> D["lastMessages 개수만큼 자른다"]
-    C -- 예 --> E["관찰된 메시지를 목록에서 빼고<br/>관찰 기록을 system 자리에 넣는다"]
-    D --> F["모델"]
-    E --> F
-    A --> G["배경: 관찰 안 된 메시지가 기준을 넘으면<br/>Observer 요약 → mastra_observational_memory"]
-    G -.observedMessageIds.-> E
+    A["사용자 메시지와 에이전트 응답"] --> B[("mastra_messages<br/>원문이 계속 쌓인다")]
+    B --> C["다음 호출 때 읽어 온다"]
+    C --> D["최근 lastMessages 개만 남기고 자른다"]
+    D --> E["모델에게 보낸다"]
+    B --> F["recall 로 전부 읽어 화면에 보여 준다"]
 ```
+
+OM이 켜지면 배경 단계가 하나 늘고, 조립 단계가 바뀐다.
+
+```mermaid
+flowchart TB
+    A["사용자 메시지와 에이전트 응답"] --> B[("mastra_messages<br/>원문이 계속 쌓인다")]
+    B --> G["배경: 관찰 안 된 메시지가 기준 토큰을 넘으면<br/>Observer 가 요약한다"]
+    G --> H[("mastra_observational_memory<br/>관찰 기록과 관찰한 메시지 id 목록")]
+    B --> C["다음 호출 때 읽어 온다"]
+    H -. "어느 메시지를 관찰했는지" .-> D
+    C --> D["관찰된 메시지를 목록에서 빼고<br/>관찰 기록을 system 자리에 넣는다"]
+    D --> E["모델에게 보낸다"]
+    B --> F["recall 로 전부 읽어 화면에 보여 준다"]
+```
+
+두 그림에서 `mastra_messages`로 들어가는 화살표와 화면으로 나가는 화살표는 똑같다. OM이 바꾸는 것은 가운데 조립 단계뿐이다.
 
 두 테이블을 잇는 것은 `observedMessageIds` 하나다. OM은 원문을 복사해 가지 않고 어디까지 봤는지만 기록한다. 그래서 관찰 기록이 원문을 대체하는 것은 컨텍스트를 조립하는 순간뿐이고, 조립이 끝나면 그 목록은 버려진다.
 
