@@ -18,7 +18,7 @@
 
 그래서 각 층은 "무엇을 버리고 무엇을 남길까"에 대한 서로 다른 답이다. Message history 는 최근 것만 남기고 오래된 것을 버린다. Observational Memory 는 버리지 않고 요약해서 남긴다. Semantic recall 은 관련 있는 것만 골라 온다. Working memory 는 짧게 요약된 상태를 항상 남긴다.
 
-기본값은 전부 보내는 것이 아니다. `Memory` 를 옵션 없이 만들면 최근 10개만 간다. (`agent-D-8HgWUU.js:16829-16834`) 전부 보내려면 `lastMessages: Number.MAX_SAFE_INTEGER` 처럼 명시해야 한다.
+기본값은 전부 보내는 것이 아니다. `Memory`를 옵션 없이 만들면 최근 10개만 간다. 전부 보내려면 `lastMessages: Number.MAX_SAFE_INTEGER`처럼 명시해야 한다.
 
 ### 사용자 입력 하나가 흐르는 길
 
@@ -36,7 +36,7 @@ agent.generate(msg, { memory: { resource, thread } })
    │
    │   (1) WorkingMemory     현재 사용자 상태를 system 에 넣는다
    │   (2) MessageHistory    최근 N개를 대화 앞에 붙인다
-   │                         OM 이 켜져 있으면 이 프로세서가 없다
+   │                         OM이 켜져 있으면 이 프로세서가 없다
    │   (3) SemanticRecall    유사 검색으로 찾은 과거를 붙인다
    │   (4) Observational     관찰된 메시지를 빼고 관찰 기록을 system 에
    │   ────────────────────  여기까지가 Mastra 가 붙인 것
@@ -64,18 +64,18 @@ agent.generate(msg, { memory: { resource, thread } })
               관찰 버퍼링 (토큰 간격에 닿았을 때)
 ```
 
-입력 순서는 `getInputProcessors` 가 `WorkingMemory`, `MessageHistory`, `SemanticRecall` 순으로 넣고(`agent-D-8HgWUU.js:17143-17210`) memory 패키지가 그 뒤에 OM 을 덧붙인다(`src-BFP4tRqs.js:31902-31911`). 출력도 같은 방식으로 조립되며, 우리 프로세서가 앞에 오는 것만 뒤집힌다.
+입력 순서는 `getInputProcessors`가 `WorkingMemory`, `MessageHistory`, `SemanticRecall` 순으로 넣고(`agent-D-8HgWUU.js:17143-17210`) memory 패키지가 그 뒤에 OM을 덧붙인다(`src-BFP4tRqs.js:31902-31911`). 출력도 같은 방식으로 조립되며, 우리 프로세서가 앞에 오는 것만 뒤집힌다.
 
 ### 프로세서가 붙는 규칙
 
 | 켠 옵션 | 붙는 프로세서 | 안 붙는 조건 |
 |---|---|---|
 | `workingMemory.enabled` | `WorkingMemory` | 같은 id 를 직접 넣었을 때 |
-| `lastMessages` | `MessageHistory` | 같은 id 를 넣었거나 OM 이 켜져 있을 때 |
+| `lastMessages` | `MessageHistory` | 같은 id 를 넣었거나 OM이 켜져 있을 때 |
 | `semanticRecall` | `SemanticRecall` | 같은 id 를 직접 넣었을 때 |
 | `observationalMemory` | `ObservationalMemory` | 같은 id 를 직접 넣었을 때 |
 
-합치는 순서는 `[Mastra 것, 우리 것]` 이다. 그래서 하나를 직접 넣으면 그것이 나머지 자동 추가분보다 뒤로 간다.
+합치는 순서는 `[Mastra 것, 우리 것]`이다. 그래서 하나를 직접 넣으면 그것이 나머지 자동 추가분보다 뒤로 간다.
 
 ### 층이 답하는 질문
 
@@ -93,26 +93,28 @@ agent.generate(msg, { memory: { resource, thread } })
 | 상황 | 켤 것 |
 |---|---|
 | 한 번 묻고 끝나는 요청 | 아무것도. `memory` 자체가 필요 없다 |
-| 짧은 대화 몇 턴 | `lastMessages` 만. 기본 10이면 대개 충분하다 |
-| 대화가 길어지는 서비스 | Observational Memory. `lastMessages` 는 자동으로 무력화된다 |
+| 짧은 대화 몇 턴 | `lastMessages`만. 기본 10이면 대개 충분하다 |
+| 대화가 길어지는 서비스 | Observational Memory. `lastMessages`는 자동으로 무력화된다 |
 | 사용자를 대화 너머로 기억해야 함 | Working memory. 스코프가 사용자 단위다 |
 | 예전 대화에서 찾아와야 함 | Semantic recall. 벡터 저장소와 임베딩 모델이 더 필요하다 |
 | 채팅 UI 에 대화 목록이 있음 | `generateTitle`. 지침을 직접 쓴다 |
 
-겹치는 것은 피한다. 문서가 OM 과 working memory 를 함께 돌리지 말라고 명시한다. 다만 스코프가 다르면 실제로 겹치지 않는다. OM 은 대화 단위이고 working memory 는 사용자 단위다.
+겹치는 것은 피한다. 문서가 OM과 working memory를 함께 돌리지 말라고 명시한다. 다만 둘 다 기본 스코프면 실제로 겹치지 않는다. OM은 대화 단위이고 working memory는 사용자 단위이기 때문이다.
 
 ### 이 저장소의 최종 구성
 
 | 층 | 설정 | 판단 |
 |---|---|---|
-| Message history | 없음 | OM 이 켜져 있어 프로세서가 만들어지지 않는다 |
-| 제목 생성 | `flash-lite` 와 직접 쓴 지침 | 기본 지침은 언어 규칙이 없어 제목이 영어로 나온다 |
+| Message history | 없음 | OM이 켜져 있어 프로세서가 만들어지지 않는다 |
+| 제목 생성 | `flash-lite`와 직접 쓴 지침 | 기본 지침에 언어 규칙이 없다 |
 | Working memory | 항목 셋짜리 템플릿, 사용자 단위 | 대화를 넘는 기억이 필요해 남긴다 |
-| Semantic recall | `true` (기본값) | 실습용. 운영이라면 OM 과 겹쳐 뺄 후보다 |
+| Semantic recall | `true`한 줄. 하위 옵션은 전부 기본값 | 학습용. 운영이라면 OM과 겹쳐 뺄 후보다 |
 | Observational Memory | 모델만 명시, 대화 단위 | 기본 모델이 막혀 있어 명시가 필수다 |
 | `TokenLimiter` | 넣지 않음 | system 자리를 자르지 못해 OM 구성에서는 쓸 구간이 없다 |
 
-학습용이라 넷을 다 켜 두었다. 운영이라면 semantic recall 을 빼고 OM 과 working memory 조합으로 가는 것이 문서 권고에 가깝다.
+학습용이라 넷을 다 켜 두었다. 운영이라면 semantic recall 을 빼고 OM과 working memory 조합으로 가는 것이 문서 권고에 가깝다.
+
+> 이 문서가 인용하는 `node_modules` 경로와 행 번호는 `@mastra/core` 1.65.0, `@mastra/memory` 1.28.3, `@mastra/libsql` 1.22.4 기준이다. 번들 파일명에 해시가 들어 있어 버전을 올리면 경로가 달라진다.
 
 ## 1. Overview
 
@@ -164,16 +166,16 @@ flowchart TB
 
 #### 왜 libSQL인가
 
-공식 문서에 데이터베이스 연동 페이지가 열일곱 개 있고 PostgreSQL, MySQL, MongoDB, Redis, ClickHouse 등이 포함된다. PostgreSQL은 지원되지 않는 것이 아니라 오히려 운영 환경의 권장 선택지다. libSQL 문서 자체가 "libSQL은 로컬 개발에 이상적이다. 트레이스 양이 많은 운영 환경에서는 PostgreSQL이나 composite storage를 통한 ClickHouse를 고려하라"고 적는다. (`integrations-databases-libsql.md:159-161`)
+공식 문서에 데이터베이스 연동 페이지가 열일곱 개 있고 PostgreSQL, MySQL, MongoDB, Redis, ClickHouse 등이 포함된다. PostgreSQL은 지원되지 않는 것이 아니라 오히려 운영 환경의 권장 선택지다. libSQL 문서 자체가 "libSQL은 로컬 개발에 이상적이다. 트레이스 양이 많은 운영 환경에서는 PostgreSQL이나 composite storage를 통한 ClickHouse를 고려하라"고 적는다. (`node_modules/@mastra/core/dist/docs/references/integrations-databases-libsql.md:159-161`)
 
 | 항목 | libSQL | PostgreSQL |
 |---|---|---|
 | 설치 | 필요 없다. 파일 하나가 DB다 | 서버를 띄우고 계정과 DB를 만들어야 한다 |
 | 문서의 권장 용도 | 로컬 개발 | 운영 |
 
-어댑터를 바꾸는 일은 `src/mastra/storage.ts` 한 파일에서 끝난다. storage 생성을 별도 파일로 뺀 이유가 이것이다.
+어댑터를 바꾸는 일은 `src/mastra/storage.ts`한 파일에서 끝난다. storage 생성을 별도 파일로 뺀 이유가 이것이다.
 
-다만 어댑터 선택이 완전히 자유롭지는 않다. Working memory를 사용자 단위로 쓰려면 `mastra_resources` 테이블을 지원하는 어댑터라야 하고, 문서는 libSQL, PostgreSQL, OracleDB, Upstash, MongoDB 다섯 개를 명시한다.
+다만 어댑터 선택이 완전히 자유롭지는 않다. Working memory를 사용자 단위로 쓰려면 `mastra_resources` 테이블을 지원하는 어댑터라야 한다. (4-2 참고)
 
 #### TypeScript 문법 (Java 대응)
 
@@ -186,7 +188,7 @@ flowchart TB
 | `{ url }` | `{ url: url }`의 축약이다 | 없다 |
 | `{ [KEY]: value }` | 상수의 값을 키로 쓴다 | `Map.of(KEY, value)` |
 
-`storage.ts`는 7행에서 `??`를 쓰고 11행에서 `||`를 쓴다. 일부러 다르다. `.env`에 `DATABASE_URL=`처럼 값을 비워 두면 그 값은 `null`이 아니라 빈 문자열이 된다. 11행에 `??`를 쓰면 빈 문자열이 그대로 통과해 접속 주소가 비어 버린다.
+`src/mastra/storage.ts:7`은 `??`를 쓰고 `:11`은 `||`를 쓴다. 일부러 다르다. `.env`에 `DATABASE_URL=`처럼 값을 비워 두면 그 값은 `null`이 아니라 빈 문자열이 된다. `:11`에 `??`를 쓰면 빈 문자열이 그대로 통과해 접속 주소가 비어 버린다.
 
 `LibSQLStore`의 `id`는 선택이 아니라 필수다. 타입 선언에 물음표가 없다. (`node_modules/@mastra/libsql/dist/storage/index.d.ts:50`)
 
@@ -204,18 +206,18 @@ flowchart TB
 
 **도구 호출은 메시지 개수를 늘리지 않는다.** 첫 턴은 도구를 한 번 불렀는데도 메시지가 두 개만 저장됐다. 사용자 메시지 하나와 assistant 메시지 하나다. 그 assistant 메시지 안에 part가 세 개 있고, 도구 호출과 그 결과가 `tool-invocation` part 하나에 `state: 'result'`로 합쳐져 있다. 나머지는 `step-start`와 최종 텍스트다.
 
-저장되는 메시지의 `role`은 `user`, `assistant`, `system`, `signal` 네 가지뿐이고 `tool`이 없다. (`node_modules/@mastra/core/dist/agent/message-list/state/types.d.ts:11`) `role: 'tool'`과 `type: 'tool-call'`은 구버전 타입에만 남아 있다. (`types.d.ts:88-99`)
+저장되는 메시지의 `role`은 `user`, `assistant`, `system`, `signal` 네 가지뿐이고 `tool`이 없다. (`node_modules/@mastra/core/dist/agent/message-list/state/types.d.ts:11`) `role: 'tool'`과 `type: 'tool-call'`은 구버전 타입에만 남아 있다. (`agent/message-list/state/types.d.ts:88-99`)
 
 그래서 `lastMessages`는 메시지를 세지 part를 세지 않는다. 도구를 몇 번 부르든 한 턴은 메시지 두 개다. 다만 컨텍스트 토큰은 part 수만큼 늘어나므로, 도구 결과가 큰 에이전트라면 `lastMessages`를 줄여도 토큰이 줄지 않을 수 있다. 토큰 기준으로 자르는 장치는 6에서 본다.
 
 **대화는 남고 할 일은 사라졌다.** 세 번째 턴에서 할 일 목록을 물었더니 빈 배열이 돌아왔다. 첫 턴에서 id 1로 저장에 성공했는데도 그랬다. 두 호출이 서로 다른 프로세스였고, `src/mastra/todo`의 할 일 배열은 프로세스 메모리에 있어서 함께 사라졌기 때문이다. Memory가 저장하는 것은 대화이지 도메인 데이터가 아니라는 말이 이 한 장면에 그대로 나왔다. 할 일 자체의 저장은 9회차 Storage에서 다룬다.
 
-그 밖에 확인한 것은 세 가지다.
+그 밖에 확인한 것은 두 가지다.
 
-- DB 파일은 프로젝트 루트에 `mastra.db`로 생겼다. 다만 스크립트를 루트에서 돌린 결과이고, `mastra dev`가 같은 파일을 여는지는 Studio를 띄워 확인해야 한다.
+- DB 파일은 프로젝트 루트에 `mastra.db`로 생겼다. 스크립트를 루트에서 돌린 결과다.
 - 스레드 제목은 두 개 모두 비어 있다. `generateTitle` 기본값이 거짓이기 때문이고, 2-1에서 켠다.
 
-실습이 끝난 뒤 `lastMessages`는 기본값 10으로 되돌렸다.
+이 시점 설정은 `lastMessages: 10`이고, 3에서 Observational Memory 를 켜면서 지운다.
 
 #### clap-agent
 
@@ -252,9 +254,7 @@ flowchart TB
      → 둘은 타임스탬프 순으로 섞인다
   7. 호출 옵션 context 배열
   8. 새 사용자 메시지 (항상 맨 마지막)
-```
-
-이 순서는 Overview 페이지의 "What the model sees" 그림이 말하는 것이다.
+```이 순서는 Overview 페이지의 "What the model sees" 그림이 말하는 것이다.
 
 세 가지가 중요하다.
 
@@ -385,8 +385,6 @@ Assistant: 홍길동님, '내일 오전 회의 준비'를 할 일 목록에 추�
 | 대화록에 답하지 말 것 | 기본 지침이 가지고 있던 방어다. 대체하면서 잃어버리면 제목 대신 답변이 나온다 |
 
 지침을 한국어로 쓴 것은 이 에이전트가 한국어 전용이기 때문이다. 지침 언어가 출력 언어를 끌어당기는데, 여기서는 항상 한국어가 정답이라 그 끌어당김이 도움이 된다. 다국어를 받아야 하는 순간 이 선택은 뒤집힌다.
-
-제목이 실제로 어떤 문장으로 나오는지는 다음 실습에서 확인한다.
 
 #### clap-agent
 
@@ -523,7 +521,7 @@ Spring으로 치면 `@PreAuthorize`에 해당하는 장치가 라이브러리에
 | Scopes (thread, resource) | 다룸 (3-2) |
 | Token budgets | 다룸 (3-2, 개념만) |
 | Comparing OM with other memory features | 다룸 (3-3, 개념만) |
-| Studio | 실습에서 확인한다 |
+| Studio | 건너뜀. 화면 확인은 하지 않는다 |
 | Extractors, Working memory updates, Retrieval mode | 건너뜀. 기본 동작을 먼저 본다 |
 | Early activation, Temporal gap markers, Async buffering | 건너뜀. 튜닝 옵션이다 |
 | Observer Context Optimization, Token counting cache | 건너뜀. 튜닝 옵션이다 |
@@ -572,7 +570,7 @@ Spring으로 치면 `@PreAuthorize`에 해당하는 장치가 라이브러리에
 | 반복 | 기록이 6천에서 3만으로 다시 자라고 또 줄어든다. 관찰 기록은 원문보다 훨씬 느리게 자란다 |
 | 관찰 4만 도달 | Reflector가 현재 관찰과 이전 반추로 더 작은 기록을 만든다 |
 
-빠진 2만 4천 토큰은 관찰 기록 1천에서 5천 토큰이 된다. 압축비가 5배에서 40배다. 원문 기록은 6천과 3만 사이를 오가고, 관찰 기록은 4만 근처에 머문다. 대화를 얼마나 오래 하든 그렇다.
+문서는 빠진 2만 4천 토큰이 관찰 기록 1천에서 5천 토큰이 되고 압축비가 5배에서 40배라고 적는다. 원문 기록은 6천과 3만 사이를 오가고, 관찰 기록은 4만 근처에 머문다. 대화를 얼마나 오래 하든 그렇다.
 
 이 값들은 활성화 기준선이지 단단한 상한이 아니다. 배경 버퍼링이 속도를 못 맞추면 기록이 기준선을 넘어 자랄 수 있다.
 
@@ -584,17 +582,17 @@ Spring으로 치면 `@PreAuthorize`에 해당하는 장치가 라이브러리에
 
 #### 실습 결과
 
-`observationalMemory`를 켜고 모델만 명시했다. 관찰이 실제로 도는 것은 확인하지 않았다.
+`observationalMemory`를 켜고 모델만 명시했다.
 
 모델을 명시한 것은 판단이 아니라 안 하면 깨지는 자리다. 기본값이 `google/gemini-2.5-flash`인데 Google이 새 사용자에게 막아 둔 모델이라, 그대로 두면 배경 관찰이 조용히 실패한다. 7회차에서 본체 모델을 바꿀 때 겪은 것과 같은 문제다.
 
-`observation.messageTokens`는 적지 않았다. 기본값 3만과 같은 값을 굳이 쓰지 않는다는 프로젝트 기준을 따랐다. 짧은 대화에서 관찰이 도는 것을 보려면 이 값을 2천 정도로 낮춰야 한다. 지금 스레드 전체가 몇백 토큰이라 기본값으로는 한 번도 돌지 않는다.
+`observation.messageTokens`는 적지 않았다. 기본값 3만과 같은 값을 굳이 쓰지 않는다는 프로젝트 기준을 따랐다. 짧은 대화에서 관찰이 도는 것을 보려면 이 값을 2천 정도로 낮춰야 한다. 지금 스레드 전체가 몇백 토큰이라 계산상 기본값으로는 닿지 않는다.
 
 낮출 때 함께 움직이는 값이 있다. `bufferTokens` 기본값 `0.2`는 `messageTokens`의 비율이라 3만이면 6천마다, 2천이면 400토큰마다 배경 버퍼링이 돈다. 문서는 이 값이 반드시 `messageTokens`보다 작아야 한다고 적는다. 비율로 두면 자동으로 지켜지지만 절대값으로 적어 두고 `messageTokens`만 낮추면 깨진다. `bufferActivation` 기본값 `0.8`도 비율이고, 활성화될 때 기록의 80퍼센트를 지우고 20퍼센트를 남긴다는 뜻이다.
 
 #### clap-agent
 
-쓰지 않는다. 대신 `lastMessages: 20`으로 자른다. 패키지 버전은 `@mastra/memory@1.23.1`이라 기능은 있고 켜지 않은 것이다. DDL 테스트에 관련 테이블이 잡혀 있는 것을 보면 라이브러리가 테이블은 만들어 두고 기능은 꺼져 있다. (`storage.test.ts:7-10`)
+쓰지 않는다. 대신 `lastMessages: 20`으로 자른다. 패키지 버전은 `@mastra/memory@1.23.1`이라 기능은 있고 켜지 않은 것이다. DDL 테스트에 관련 테이블이 잡혀 있는 것을 보면 라이브러리가 테이블은 만들어 두고 기능은 꺼져 있다. (`src/mastra/storage.test.ts:7-10`)
 
 켜지 않은 배경이 몇 가지 읽힌다.
 
@@ -679,11 +677,11 @@ if (!hasMessageHistory && !hasObservationalMemory) processors.push(new MessageHi
 | Working memory | `resource` |
 | Semantic recall | `resource` |
 
-OM만 켜고 기본값을 쓰면 관찰 기록이 그 대화 안에만 산다. 새 대화를 시작하면 사용자 이름도 선호도 모른다. 문서가 "OM이 working memory를 대체한다"고 말할 때의 전제는 스코프를 맞췄을 때다. 그 문장만 보고 기본값으로 켜면 대화를 넘는 기억이 조용히 사라진다. `observation.manageWorkingMemory` 옵션이 있는 것도 이 때문으로 보인다. Observer가 관찰하면서 working memory를 함께 갱신하게 하는 방식이라 둘을 대립시키지 않고 붙여 쓰는 길을 열어 둔 것이다.
+OM만 켜고 기본값을 쓰면 관찰 기록이 그 대화 안에만 산다. 새 대화를 시작하면 사용자 이름도 선호도 모른다. 문서가 "OM이 working memory를 대체한다"고 말할 때의 전제는 스코프를 맞췄을 때다. 그 문장만 보고 기본값으로 켜면 대화를 넘는 기억이 조용히 사라진다. `observation.manageWorkingMemory` 옵션이 있는 것도 이 때문으로 보인다. (추정) Observer가 관찰하면서 working memory를 함께 갱신하게 하는 방식이라 둘을 대립시키지 않고 붙여 쓰는 길을 열어 둔 것이다.
 
 #### 저장과 컨텍스트는 다른 층이다
 
-OM은 메시지를 지우지 않는다. OM이 부르는 함수는 `filterObservedMessages`이고 하는 일은 `messageList.removeByIds(...)`다. (`src-BFP4tRqs.js:23652-23676`) `messageList`는 이번 요청에서 모델에게 보낼 목록이지 DB 테이블이 아니다. OM 코드 어디에도 `deleteMessages` 호출이 없다.
+OM은 메시지를 지우지 않는다. OM이 부르는 함수는 `filterObservedMessages`이고 하는 일은 `messageList.removeByIds(...)`다. (`node_modules/@mastra/memory/dist/src-BFP4tRqs.js:23652-23676`) `messageList`는 이번 요청에서 모델에게 보낼 목록이지 DB 테이블이 아니다. OM 코드 어디에도 `deleteMessages` 호출이 없다.
 
 같은 테이블을 읽는 흐름이 둘이고 목적이 다르다. 하나는 모델에게 보낼 컨텍스트를 만들고, 하나는 사람에게 보여 줄 화면을 만든다. OM은 앞엣것에만 개입한다.
 
@@ -852,7 +850,9 @@ OM과 함께 쓰는 길도 있다. `observationalMemory.observation.manageWorkin
 - 저장 시점을 "그 자리에서"로 못박았다. 언제 갱신할지 안 적으면 모델이 대화 끝에 몰아서 하거나 아예 하지 않는다.
 - 저장하지 않을 것을 명시했다. 할 일 내용과 완료 여부다.
 - 정정 처리를 적었다. 사용자가 말을 바꿨을 때 예전 값을 남겨 두면 양식에 두 값이 공존한다.
-- 추측 금지를 넣었다. `resource` 스코프라 잘못 적으면 다음 대화까지 따라간다.
+- "확실하지 않은 것은 적지 않는다"를 넣었다. `resource` 스코프라 잘못 적으면 다음 대화까지 따라간다.
+
+설정까지만 하고 실제 갱신이 도는 것은 보지 않았다.
 
 마지막 항목이 Claude Code 메모리 지침과 같은 문제의식이다. 모델이 쓰는 기억은 잘못 적히면 스스로 고치기 어렵다. 모델은 그 값을 사실로 읽고 계속 참고하므로, 무엇을 적을지보다 무엇을 적지 말지를 정하는 쪽이 규칙의 절반을 차지하게 된다.
 
@@ -947,12 +947,6 @@ JSON Merge Patch(RFC 7386)와 같은 규칙이다. 배열을 통째로 바꾸는
 
 1-1 실습에서 겪은 문제가 이것으로 풀린다. 그때 `todo-2`가 이름을 몰랐던 이유는 message history가 대화 단위이기 때문이었다. Working memory는 기본이 사용자 단위라 같은 사용자의 새 대화에도 실린다.
 
-층마다 답할 수 있는 질문이 다르다.
-
-- "아까 뭐라고 했지" → message history
-- "이 대화에서 지금까지 뭘 했지" → 관찰 기록
-- "나를 뭐라고 부르지" → working memory
-
 #### 칸마다 채우는 주체를 나눈다
 
 문서 예시가 의료 상담이다. 혈액형과 알레르기가 초기값으로 들어간다. 이런 값은 병원 시스템에 이미 있는 확정된 사실이라 환자가 말해 주기를 기다리거나 모델이 추측하게 두면 안 된다. 반대로 "오늘 통증이 어제보다 덜하다"는 대화에서만 알 수 있어 모델이 채운다.
@@ -980,7 +974,7 @@ JSON Merge Patch(RFC 7386)와 같은 규칙이다. 배열을 통째로 바꾸는
 | Storage configuration, Embedder configuration (Model Router) | 다룸 (5-1) |
 | Recall configuration (topK, messageRange, scope) | 다룸 (5-2) |
 | Metadata filtering | 다룸 (5-2, 개념만) |
-| Viewing recalled messages, Disable semantic recall | 실습에서 확인한다 |
+| Viewing recalled messages, Disable semantic recall | 건너뜀. 트레이스는 10회차에서 본다 |
 | Using the `recall()` method | 건너뜀. 2-2와 겹친다 |
 | Using AI SDK Packages, Using FastEmbed (local) | 건너뜀. Model Router만 쓴다 |
 | PostgreSQL index optimization | 건너뜀. 운영 튜닝이다 |
@@ -1030,7 +1024,7 @@ RAG다. 메시지를 임베딩해 벡터 DB에 넣어 두고, 새 메시지가 �
 | `src/mastra/models.ts` | `EMBEDDING_MODELS` 상수 (`google/gemini-embedding-001`) |
 | `src/mastra/agents/todo-agent.memory.ts` | `vector`, `embedder`, `semanticRecall` |
 
-옵션은 `semanticRecall: true` 한 줄로 두었다. `topK`, `messageRange`, `scope` 세 값이 모두 기본값과 같아서다. 소스에서 확인한 기본값은 4, 1, `resource`다. (`agent-D-8HgWUU.js:18117-18118`, `:18164-18165`)
+옵션은 `semanticRecall: true`한 줄로 두었다. `topK`, `messageRange`, `scope` 세 값이 모두 기본값과 같아서다. 소스에서 확인한 기본값은 4, 1, `resource`다. (`agent-D-8HgWUU.js:18117-18118`, `:18164-18165`)
 
 기본값을 그대로 둔 근거는 이렇다.
 
@@ -1044,7 +1038,7 @@ RAG다. 메시지를 임베딩해 벡터 DB에 넣어 두고, 새 메시지가 �
 
 `messageRange`가 있는 이유는 유사도 검색의 한계 때문이다. 답이 담긴 메시지 하나만 끌어오면 그것이 무슨 질문에 대한 답이었는지 알 수 없다. 앞뒤를 함께 넣어야 맥락이 산다. 다만 세 값이 전부 컨텍스트 토큰을 늘린다. `topK: 4`에 `messageRange: 1`이면 최대 열두 개 메시지가 추가로 실린다.
 
-옵션 블록을 지우고 `true` 한 줄로 줄이면 근거가 코드에서 사라진다. 나중에 `topK`를 올릴 때 "원래 4였고 그건 기본값이었다"는 맥락이 필요한데 코드는 그것을 말해 주지 않는다. 그 몫을 이 정리 파일이 가져간다.
+옵션 블록을 지우고 `true`한 줄로 줄이면 근거가 코드에서 사라진다. 나중에 `topK`를 올릴 때 "원래 4였고 그건 기본값이었다"는 맥락이 필요한데 코드는 그것을 말해 주지 않는다. 그 몫을 이 정리 파일이 가져간다.
 
 ### 5-2. 조회 설정과 metadata 필터
 
@@ -1100,7 +1094,7 @@ semanticRecall: {
 
 원문: https://mastra.ai/docs/memory/memory-processors
 
-7회차 Processors 절에서 미뤄 둔 `TokenLimiter`와 `ToolCallFilter`가 여기서 의미를 가진다.
+7회차 Processors 절에서 미뤄 둔 `TokenLimiter`가 여기서 의미를 가진다. 같이 미뤄 둔 `ToolCallFilter`는 도구 호출을 기록에서 걸러 내는 것이라 이 절의 범위 밖이고, 필요할 때 레퍼런스로 찾는다.
 
 | 소제목 | 처리 |
 |---|---|
@@ -1122,7 +1116,7 @@ semanticRecall: {
 | `semanticRecall` | `SemanticRecall` | 유사 검색으로 찾아 붙인다 | 새 메시지를 임베딩해 저장한다 |
 | `workingMemory` | `WorkingMemory` | 현재 값을 system 에 넣는다 | 갱신된 값을 저장한다 |
 
-셋 다 입력과 출력 양쪽에 붙는다. 읽어 오는 것과 저장하는 것이 한 프로세서의 두 면이다.
+셋 다 입력과 출력 양쪽에 붙는다. 읽어 오는 것과 저장하는 것이 한 프로세서의 두 면이다. 이 저장소 구성에서는 OM을 켜 두어 `MessageHistory`가 만들어지지 않는다.
 
 실행 순서는 이렇다.
 
@@ -1167,11 +1161,11 @@ semanticRecall: {
 
 system 메시지는 자르지 않는다. 오히려 system 만으로 한도를 넘으면 `TripWire`를 던져 요청 자체를 막는다. 문구가 "system 메시지를 빼는 것으로는 요청을 완료할 수 없다"다.
 
-우리 에이전트는 system 자리가 무겁다. 관찰 기록이 최대 4만 토큰까지 자라고 다른 대화의 recall 도 여기 들어간다. 반대로 대화 메시지는 OM 이 3만 토큰 근처로 이미 묶어 둔다. 자를 수 있는 쪽은 얇고 커지는 쪽은 손대지 못하는 구조다.
+우리 에이전트는 system 자리가 무겁다. 관찰 기록이 최대 4만 토큰까지 자라고 다른 대화의 recall 도 여기 들어간다. 반대로 대화 메시지는 OM이 3만 토큰 근처로 이미 묶어 둔다. 자를 수 있는 쪽은 얇고 커지는 쪽은 손대지 못하는 구조다.
 
 한도를 4만보다 낮게 잡으면 관찰 기록이 자란 순간 요청이 아예 안 되고, 높게 잡으면 자를 일이 없다. 쓸 구간이 좁다.
 
-OM 에는 자기 예산 장치가 이미 있다. `observation.messageTokens`가 대화 메시지를, `reflection.observationTokens`가 관찰 기록을 각각 묶는다. `TokenLimiter`는 OM 을 쓰지 않고 `lastMessages`로만 가는 구성에서 값을 한다. 개수로 자르면 도구 결과가 큰 턴이 통째로 들어오는데 토큰으로 자르면 그것이 잡히기 때문이다. 우리는 OM 쪽을 골랐으므로 그 자리를 OM 이 대신한다.
+OM에는 자기 예산 장치가 이미 있다. `observation.messageTokens`가 대화 메시지를, `reflection.observationTokens`가 관찰 기록을 각각 묶는다. `TokenLimiter`는 OM을 쓰지 않고 `lastMessages`로만 가는 구성에서 값을 한다. 개수로 자르면 도구 결과가 큰 턴이 통째로 들어오는데 토큰으로 자르면 그것이 잡히기 때문이다. 우리는 OM 쪽을 골랐으므로 그 자리를 OM이 대신한다.
 
 ### 6-2. 가드레일과 메모리
 
@@ -1186,19 +1180,9 @@ OM 에는 자기 예산 장치가 이미 있다. `observation.messageTokens`가 
 
 차단된 내용이 대화 기록에 남지 않는다. 이것이 순서 설계의 목적이다.
 
-우리 에이전트에 적용하면 이렇게 된다.
-
-```
-입력:  [WorkingMemory] [SemanticRecall] [OM]     ← 메모리가 먼저
-       → unicodeNormalizer → inputModeration    ← 우리 가드레일
-
-출력:  outputFilter                              ← 우리 것이 먼저
-       → [WorkingMemory] [SemanticRecall] [OM]  ← 메모리 저장이 나중
-```
-
 입력 순서에 미묘한 점이 있다. 정규화가 기록을 불러온 뒤에 돈다. 그래서 `unicodeNormalizer`는 이번에 들어온 새 메시지뿐 아니라 storage 에서 읽어 온 과거 메시지까지 함께 보게 된다. 과거 메시지는 저장될 때 이미 정규화를 거쳤으므로 결과는 달라지지 않지만 헛일을 매번 반복하는 셈이고, 대화가 길수록 그 비용이 붙는다.
 
-`inputModeration` 처럼 LLM 을 부르는 가드레일이라면 더 신경 쓸 만하다. 과거 메시지까지 매번 검사하게 된다. clap-agent 가 LLM 가드레일을 사후 비동기로 돌린 이유와 이어지는 지점이다. 실제로 어느 범위를 보는지는 프로세서가 `messageList` 에서 무엇을 꺼내는지에 달렸고, 여기서는 확인하지 않았다.
+`inputModeration`처럼 LLM 을 부르는 가드레일이라면 더 신경 쓸 만하다. 과거 메시지까지 매번 검사하게 된다. clap-agent 가 LLM 가드레일을 사후 비동기로 돌린 이유와 이어지는 지점이다. 실제로 어느 범위를 보는지는 프로세서가 `messageList`에서 무엇을 꺼내는지에 달렸다.
 
 #### 헷갈렸던 지점
 
@@ -1243,11 +1227,11 @@ OM 에는 자기 예산 장치가 이미 있다. `observation.messageTokens`가 
 |---|---|
 | 짧은 대화, 또는 누가 뭘 말했는지 원문이 필요할 때 | message history 만 |
 | 긴 대화. 사용자별 사실이 기록 밖으로 밀려나도 남아야 할 때 | Observational Memory |
-| 참여자 목록이 구조화돼야 하거나 어댑터가 OM 을 지원하지 않을 때 | Working memory |
+| 참여자 목록이 구조화돼야 하거나 어댑터가 OM을 지원하지 않을 때 | Working memory |
 
-문서가 OM 과 working memory 를 같이 쓰지 말라고 명시한다. 겹치는 필요를 다루므로 함께 돌리면 지연과 토큰만 늘고 이득이 적다는 것이다. 멀티 사용자 맥락에서 한 말이지만 근거는 일반적이다.
+문서가 OM과 working memory 를 같이 쓰지 말라고 명시한다. 겹치는 필요를 다루므로 함께 돌리면 지연과 토큰만 늘고 이득이 적다는 것이다. 멀티 사용자 맥락에서 한 말이지만 근거는 일반적이다.
 
-OM 을 권하는 이유도 적혀 있다. 사실을 자동으로 뽑아내고, 참여자가 몇이든 확장되며, 템플릿을 관리할 필요가 없다. 기본 Observer 모델이 `<turn>` 태그를 그대로 읽어 발화자를 살린 기록을 만든다.
+OM을 권하는 이유도 적혀 있다. 사실을 자동으로 뽑아내고, 참여자가 몇이든 확장되며, 템플릿을 관리할 필요가 없다. 기본 Observer 모델이 `<turn>` 태그를 그대로 읽어 발화자를 살린 기록을 만든다.
 
 Working memory 는 여기서 어색해진다. 단일 사용자라면 "부를 이름"이 하나인데 여럿이면 참여자마다 다르다. 템플릿을 참여자 목록 형태로 바꿔야 하고 사람이 들어오고 나갈 때마다 모델이 그것을 관리해야 한다.
 
@@ -1263,7 +1247,7 @@ Working memory 는 여기서 어색해진다. 단일 사용자라면 "부를 이
 
 #### 보안
 
-발화자를 요청 본문에서 받지 말고 인증된 컨텍스트에서 가져오라고 문서가 못박는다. 클라이언트가 자기 `author_id`를 고를 수 있으면 다른 사람을 사칭할 수 있다. `resourceId` 를 클라이언트가 정하지 못하게 하는 것과 같은 구조이고 해법도 같다. 서버가 정한다.
+발화자를 요청 본문에서 받지 말고 인증된 컨텍스트에서 가져오라고 문서가 못박는다. 클라이언트가 자기 `author_id`를 고를 수 있으면 다른 사람을 사칭할 수 있다. `resourceId`를 클라이언트가 정하지 못하게 하는 것과 같은 구조이고 해법도 같다. 서버가 정한다.
 
 #### clap-agent
 
