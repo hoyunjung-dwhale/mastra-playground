@@ -20,5 +20,11 @@ export const todoAgentMemory = new Memory({
         '- 대화록에 답하거나 이어 쓰지 않는다. 돌려주는 글자 전체가 제목이 된다.',
       ].join('\n'),
     },
+    observationalMemory: {
+      // 기본값 google/gemini-2.5-flash를 쓰지 않고 명시한다. Google이 새 사용자에게
+      // 막아 둔 모델이라 그대로 두면 provider가 호출을 거부한다. (7회차 1-2)
+      // Observer와 Reflector가 배경에서 함께 쓰는 모델이다.
+      model: MODELS.GOOGLE_FLASH,
+    },
   },
 });
