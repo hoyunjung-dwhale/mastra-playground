@@ -119,6 +119,99 @@ flowchart TB
 
 - 왜 libSQL을 쓰나, PostgreSQL은 지원하지 않나 → 지원한다. 운영에는 PostgreSQL이 권장이고, libSQL은 서버 없이 파일 하나로 끝나 실습에 맞아서 골랐다.
 
+### 1-2. 모델이 보는 컨텍스트
+
+#### 개념
+
+메모리는 별도 통로로 모델에게 전달되지 않는다. 결국 모델에게 보내는 메시지 목록 안으로 들어간다. 층마다 들어가는 자리가 다르고, 그 차이가 나머지 페이지를 읽는 기준이 된다.
+
+```
+[ system 메시지 ]
+  1. instructions (에이전트 정의)
+  2. 호출할 때 넘긴 system 메시지
+  3. Working memory (템플릿과 현재 값)
+  4. Semantic recall 중 '다른 스레드'에서 찾은 것
+  5. Observational Memory (관찰·반추 기록)
+
+[ 대화 메시지 ]
+  6. Message history 최근 N개
+     Semantic recall 중 '같은 스레드'에서 찾은 것
+     → 둘은 타임스탬프 순으로 섞인다
+  7. 호출 옵션 context 배열
+  8. 새 사용자 메시지 (항상 맨 마지막)
+```
+
+이 순서는 Overview 페이지의 "What the model sees" 그림이 말하는 것이다.
+
+세 가지가 중요하다.
+
+- `lastMessages`가 자르는 것은 6번뿐이다. Working memory와 Observational Memory는 system 자리에 있어서 개수 제한과 무관하게 항상 들어간다.
+- Semantic recall은 찾은 위치에 따라 자리가 갈린다.
+- `context` 옵션은 저장되지 않는다. 호출 시각이 찍히므로 기록과 recall보다 뒤, 새 메시지보다 앞에 놓인다.
+
+대화 메시지는 타임스탬프로 정렬하고 메시지 id로 중복을 제거한다. 그래서 recall이 끌어온 오래된 메시지가 최근 기록보다 앞에 놓인다. 클라이언트가 대화 전체를 다시 보내면 안 되는 이유가 여기 있다. 중복 제거는 id 기준인데 클라이언트가 새로 만든 메시지는 id가 달라 걸러지지 않는다.
+
+Observational Memory를 켜면 6번의 성격이 바뀐다. 이미 관찰된 메시지는 대화에서 빠지고 5번의 system 메시지로 대체되며, 아직 관찰되지 않은 최근 메시지만 대화에 남는다. 기억을 늘리면서 컨텍스트는 줄이는 구조이고, 문서가 이 층을 권장으로 표시한 이유다.
+
+실제 요청에 무엇이 들어갔는지는 트레이스의 LLM 호출 span에서 본다. 10회차에서 다룬다.
+
+#### context 옵션
+
+호출할 때만 붙이는 임시 대화 메시지 배열이다. 타입은 `ModelMessage[]`이고 `role`과 `content`를 가진 메시지 객체를 넣는다. (`node_modules/@mastra/core/dist/agent/agent.types.d.ts:477`)
+
+```ts
+await agent.generate('이 주문 환불해 줘', {
+  context: [{ role: 'system', content: '현재 사용자 등급: VIP, 잔여 환불 한도: 2회' }],
+});
+```
+
+프롬프트에 문자열로 붙이는 것과 세 가지가 다르다.
+
+| | `context` | `instructions`에 붙이기 | 사용자 메시지에 붙이기 |
+|---|---|---|---|
+| 놓이는 자리 | 대화 메시지, 기록 뒤 새 메시지 앞 | system, 맨 앞 | 사용자 메시지 안 |
+| 저장 | 안 된다 | 안 된다 | 된다 |
+| 사용자에게 보이나 | 안 보인다 | 안 보인다 | 보인다 |
+
+저장되지 않는 것이 핵심이다. 사용자 메시지에 배경 정보를 끼워 넣으면 그것이 대화 기록에 남아 다음 호출에도 계속 딸려 온다. 그때는 이미 낡은 값인데도 그렇다. Spring으로 치면 요청 스코프 빈에 가깝다. 요청이 끝나면 사라지고 다음 요청은 새 값을 받는다.
+
+문서가 드는 예는 앱 상태와 직접 만든 RAG 결과 두 가지다. 앱 상태는 지금 보고 있는 화면이나 사용자 등급처럼 요청마다 바뀌는 값이고, RAG 결과는 사내 문서 같은 외부 지식을 직접 찾아 넣는 경우다.
+
+#### semantic recall을 나눠 넣는 이유
+
+다른 대화에서 찾은 것은 통째로 감싼 system 메시지 하나가 된다. (`agent-D-8HgWUU.js:18243-18266`)
+
+```
+The following messages were remembered from a different conversation:
+<remembered_from_other_conversation>
+
+the following messages are from 2026, Sep, 12
+Message from previous conversation at 3:04 PM: User: 나는 매운 걸 못 먹어
+Message from previous conversation at 3:04 PM: Assistant: 기억해 두겠습니다
+
+<end_remembered_from_other_conversation>
+```
+
+섞으면 지금 대화가 아닌 것이 지금 대화인 척하게 되기 때문이다. 대화 메시지는 타임스탬프 순으로 정렬되므로, 다른 대화의 사용자 발화를 그대로 끼워 넣으면 모델이 보기에 이 대화에서 방금 한 말과 구분되지 않는다. 어제 다른 대화에서 한 말을 지금 요청으로 착각하고 그에 답할 수 있다.
+
+같은 대화에서 찾은 것은 그 문제가 없다. 원래 이 대화에서 오갔던 말이고 `lastMessages` 창 밖으로 밀려났을 뿐이라, 제자리인 시간순에 도로 끼워 넣는 편이 맥락을 복원한다.
+
+정렬 코드에 재현성 장치가 붙어 있다. (`:18215-18222`) 벡터 검색 결과는 유사도 점수에 따라 같은 질의라도 순서가 흔들릴 수 있어서, 시각과 스레드 id, 역할, 메시지 id 순으로 다시 정렬한 뒤 문자열을 만든다. 순서가 흔들리면 프롬프트 문자열이 달라져 캐시가 매번 어긋나고 평가 결과도 호출마다 달라지기 때문이다. 라벨 형식은 longmemeval 벤치마크로 검증한 것이라 고정해 두었다는 주석도 있다. (`:18242`)
+
+#### clap-agent
+
+- `context` 옵션은 저장소 전체에서 한 번도 쓰지 않는다. 요청마다 달라지는 맥락, 즉 어느 상위리뷰에 관한 대화인지는 `instructions`를 함수로 두어 system 자리에 넣는다. (`agents/clap-agent.ts:73-78`)
+- 이유는 프롬프트 캐싱이다. Anthropic 캐시는 프리픽스가 글자 단위로 같아야 맞으므로 system 메시지를 두 덩어리로 나눴다. 앞 덩어리(지침, 도메인 지식, 코드 모드 선언)에 캐시 마커를 붙이고, 뒤 덩어리에 요청별 값을 둔다. 요청별 값을 앞에 두면 상위리뷰가 바뀔 때마다 모든 사용자가 공유하던 프리픽스가 통째로 무효가 된다. (`clap-agent.ts:71-72`)
+- 앞 덩어리는 한 번 만들어 변수에 담아 두고 계속 돌려쓴다. (`clap-agent.ts:53-63`) 매번 새로 문자열을 만들면 내용이 같아도 캐시 프리픽스가 어긋날 수 있기 때문이다.
+- working memory는 일부러 끈다. 켜면 Mastra가 갱신 도구 호출을 강제해 루프가 끝나지 않고 같은 말풍선에 답이 두 번 찍혔으며, 담기던 정보도 대화 단위라 `lastMessages`로 이미 들어오는 내용과 겹쳤다. (`clap-agent.ts:108-109`)
+
+`context`와 함수형 `instructions`의 차이는 자리다. 저장되지 않는다는 점은 같다. 캐싱을 쓰는 Anthropic 모델이라면 system 자리가 유리하고, 이번 요청에만 쓸 검색 결과처럼 양이 크고 매번 다른 것이라면 `context`가 자연스럽다.
+
+#### 헷갈렸던 지점
+
+- `context` 옵션이 뭔가 → 호출할 때만 붙이는 임시 대화 메시지 배열이고, 그 요청에서만 쓰이며 저장되지 않는다.
+- semantic recall은 왜 나눠서 넣나 → 다른 대화의 메시지를 시간순에 섞으면 지금 대화의 발화와 구분되지 않아서, 태그로 감싼 system 메시지 하나로 따로 넣는다.
+
 ## 2. Message History
 
 원문: https://mastra.ai/docs/memory/message-history
