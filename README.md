@@ -28,6 +28,8 @@ Studio는 등록된 에이전트와 대화하고 도구 호출 과정을 보는 
 | `npm run structured` | structured output 호출 |
 | `npm run call:memory` | `resource`·`thread`를 넘겨 기억 확인 |
 | `npm run threads` | 저장된 스레드·메시지 조회 |
+| `npm run context` | `requestContext`로 소유자·말투를 넘겨 호출 |
+| `npm run prune` | `retention` 정책에 따라 오래된 행 삭제 |
 | `npm run check` | biome 서식·린트 (자동 수정은 `check:fix`) |
 | `npm run typecheck` | tsc |
 
@@ -45,6 +47,7 @@ src/mastra/
   tools/                도구. 파일 하나에 하나씩
   todo/                 할 일 스키마(zod)와 저장소
   processors/           입력 가드레일, 출력 스트림 필터
+  server/               서버 미들웨어와 커스텀 API 라우트
 scripts/                호출·조회 예제
 docs/                   회차별 정리 (저장소 작성자)
 notes/                  클론한 학습자가 자기 정리를 쓰는 곳
@@ -61,7 +64,7 @@ CLAUDE.md               Claude Code로 함께 공부할 때 쓰는 진행 규칙
 |---|---|---|---|
 | 1 | Build / Agents | `docs/agents.md` | 끝 |
 | 2 | Build / Memory | `docs/memory.md` | 끝 |
-| 3 | Develop, Deploy / Storage, Server | `docs/develop-deploy.md` | 예정 |
+| 3 | Develop, Deploy / Storage, Server | `docs/develop-deploy.md` | 끝 |
 | 4 | Observe / Trace, Metrics, Evals | `docs/observe.md` | 예정 |
 
 ## 따라 하기
