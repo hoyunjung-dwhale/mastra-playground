@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { ownerIdOf, todoAgentRequestContextSchema } from '../agents/todo-agent.context';
 import { todoSchema } from '../todo/todo.schema';
 import { listTodos } from '../todo/todo-store';
 
@@ -12,6 +13,7 @@ export const listTodosTool = createTool({
       .optional()
       .describe('생략 시 전체, true면 완료된 것만, false면 완료되지 않은 것만 보여준다.'),
   }),
+  requestContextSchema: todoAgentRequestContextSchema,
   outputSchema: z.array(todoSchema),
-  execute: async ({ done }) => listTodos(done),
+  execute: async ({ done }, context) => listTodos(ownerIdOf(context), done),
 });

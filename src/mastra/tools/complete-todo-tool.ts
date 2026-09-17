@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { ownerIdOf, todoAgentRequestContextSchema } from '../agents/todo-agent.context';
 import { todoSchema } from '../todo/todo.schema';
 import { completeTodo } from '../todo/todo-store';
 
@@ -18,9 +19,10 @@ export const completeTodoTool = createTool({
   inputSchema: z.object({
     id: z.number().int().positive().describe('완료 처리할 할 일의 id. listTodosTool 결과의 id 값'),
   }),
+  requestContextSchema: todoAgentRequestContextSchema,
   outputSchema: z.union([todoNotFoundSchema, todoSchema]),
-  execute: async ({ id }) => {
-    const todo = completeTodo(id);
+  execute: async ({ id }, context) => {
+    const todo = completeTodo(ownerIdOf(context), id);
     if (!todo) {
       return {
         error: true as const,
